@@ -1,0 +1,10 @@
+
+.dart_tool/
+
+pubspec.lock
+# Dart / Flutter
+.packages
+build/
+# VS Code / IntelliJ caches
+.idea/
+.vscode/
