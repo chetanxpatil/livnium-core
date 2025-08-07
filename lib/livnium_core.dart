@@ -35,7 +35,7 @@ export 'src/alphabet.dart'           show symbolToValue, valueToSymbol;
 
 // ───────────────────────────────── Encoding / façade ────────────────────────
 export 'src/codec.dart';             // low-level CsvCodec, FixedCodec, etc.
-export 'src/core.dart' show LivniumCore, LivniumCodec;
+export 'src/core.dart' show LivniumCore;
 
 // ───────────────────────────────── Math & motion ────────────────────────────
 export 'src/rotation.dart';
