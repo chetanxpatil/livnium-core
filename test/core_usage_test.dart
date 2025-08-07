@@ -24,5 +24,11 @@ void main() {
       final rotated = rotateZQuarter(v);
       expect(rotated, equals(const Vec3(1, -1, -1)));
     });
+
+    test('fixed codec maps a0 to decimal 100', () {
+      final encoded = encodeFixedInt('a0');
+      expect(encoded, equals(100));
+      expect(decodeFixedInt(encoded!), equals('a0'));
+    });
   });
 }
