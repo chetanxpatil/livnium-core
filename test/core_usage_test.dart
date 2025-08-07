@@ -27,7 +27,7 @@ void main() {
 
     test('fixed codec maps a0 to decimal 100', () {
       final encoded = encodeFixedInt('a0');
-      expect(encoded, equals(100));
+      expect(encoded, equals(27));
       expect(decodeFixedInt(encoded!), equals('a0'));
     });
   });

@@ -2,12 +2,12 @@
 // --------------------
 // Livnium Core – Base-27 Symbol Alphabet
 //
-// • Digit-set:  '0', 'a' … 'z'  →  0 … 26
-// • No composite “a0” token.  If you need the value 27, write two digits
-//   exactly the way “10” works in decimal.
+// Digit-set: '0', 'a' … 'z' → values 0 … 26
+// This is a positional numeral system: "a0" = 27 decimal.
+// (No special single-symbol token for 27; use multi-digit representation.)
 //
-// This file is *pure data + helpers*.  Higher-level encoders/decoders
-// (CSV, fixed-width, tail-sentinel BigInt, etc.) live in `codec.dart`.
+// This file is *pure data + helpers*. Higher-level encoders/decoders
+// live in `codec.dart`.
 
 library;
 
@@ -17,8 +17,8 @@ const int kRadix = 27;
 /// Ordered symbol list (index == numeric value).
 const List<String> kSymbols = [
   '0', //
-  'a', 'b', 'c', 'd', 'e', 'f',  //
-  'g', 'h', 'i', 'j', 'k', 'l', 'm', 'n', 'o', 'p', //
+  'a', 'b', 'c', 'd', 'e', 'f',
+  'g', 'h', 'i', 'j', 'k', 'l', 'm', 'n', 'o', 'p',
   'q', 'r', 's', 't', 'u', 'v', 'w', 'x', 'y', 'z',
 ];
 
@@ -32,16 +32,15 @@ final Map<int, String> valueToSymbol = {
   for (int i = 0; i < kSymbols.length; i++) i: kSymbols[i],
 };
 
-/// Fast helper: convert *one* symbol to its digit value.
+/// Convert *one* symbol to its digit value.
 /// Returns `null` if the character is not in the alphabet.
 int? charToDigit(String ch) => symbolToValue[ch];
 
-/// Fast helper: convert *one* digit (0‥26) to a symbol.
+/// Convert *one* digit (0‥26) to a symbol.
 /// Returns `null` if `v` is outside range.
 String? digitToChar(int v) => valueToSymbol[v];
 
 /// Convert `"0az"` → `[0, 1, 26]`.
-/// Returns `null` if the input contains an invalid character.
 List<int>? stringToDigits(String text) {
   final out = <int>[];
   for (final ch in text.split('')) {
@@ -53,7 +52,6 @@ List<int>? stringToDigits(String text) {
 }
 
 /// Convert `[0, 1, 26]` → `"0az"`.
-/// Returns `null` if any digit is outside `0‥26`.
 String? digitsToString(Iterable<int> digits) {
   final buffer = StringBuffer();
   for (final d in digits) {

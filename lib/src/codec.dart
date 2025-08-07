@@ -2,15 +2,15 @@
 // ------------------
 // Livnium Core – loss-free serialisation helpers.
 //
-// This module builds on `alphabet.dart` and gives you three reversible
-// wire-formats:
+// Builds on `alphabet.dart` to provide three reversible wire-formats:
 //
-//  1. CSV          – human-readable, zero ambiguity
-//  2. Fixed-width  – each digit written as 2-digit decimal (00-26)
-//  3. Tail-sentinel BigInt – packs a whole word into a single integer
+// 1. CSV (numeric)          – human-readable, zero ambiguity
+//    e.g. "0az" → "0,1,26"
+// 2. Fixed-width numeric    – each digit as two decimal chars (00–26)
+//    e.g. "0az" → "000126"
+// 3. Tail-sentinel BigInt   – packs a whole word into a single integer
 //
-// All encoders return `null` on illegal input so callers can fall back
-// or surface a clean error.
+// All encoders return `null` on illegal input.
 
 library;
 
@@ -19,28 +19,24 @@ import 'alphabet.dart';
 final _k27 = BigInt.from(kRadix);
 
 /// ------------------------------------------------------------------
-/// CSV  (easiest to eyeball & diff)
-//  e.g.  "0,a,z"  →  "0az"
+/// CSV (numeric)
+/// "0az" → "0,1,26"
 /// ------------------------------------------------------------------
 String? encodeCsv(String text, {String sep = ','}) =>
     stringToDigits(text)?.join(sep);
 
 String? decodeCsv(String csv, {String sep = ','}) {
-  late final List<int> digits;
   try {
-    digits = csv.split(sep).map(int.parse).toList();
+    final digits = csv.split(sep).map(int.parse).toList();
+    return digitsToString(digits);
   } on FormatException {
     return null;
   }
-  return digitsToString(digits);
 }
 
 /// ------------------------------------------------------------------
 /// Fixed-width numeric
-//  Each digit becomes two decimal chars (00-26), so the string length
-//  is always even and ambiguity-free.
-//  e.g.  "0az"  →  "000126"  (→ int.parse(..) fits in 64-bit for
-//        up to 9 Livnium symbols).
+/// "0az" → "000126"
 /// ------------------------------------------------------------------
 String? encodeFixed(String text) =>
     stringToDigits(text)
@@ -56,31 +52,39 @@ String? decodeFixed(String numeric) {
   return digitsToString(digits);
 }
 
-/// Convenience:  numeric-string  ↔  int
-String? decodeFixedInt(int value) =>
-    decodeFixed(value.toString().padLeft(
-        (value.toString().length + 1) & ~1, '0'));
+/// ------------------------------------------------------------------
+/// Fixed-int (base-27 <-> decimal int)
+/// ------------------------------------------------------------------
+String? decodeFixedInt(int value) {
+  if (value < 0) return null;
+  final digits = <int>[];
+  var n = value;
+  while (n > 0) {
+    digits.insert(0, n % kRadix);
+    n ~/= kRadix;
+  }
+  return digitsToString(digits.isEmpty ? [0] : digits);
+}
 
-int? encodeFixedInt(String text) =>
-    int.tryParse(encodeFixed(text) ?? '');
+int? encodeFixedInt(String text) {
+  final digits = stringToDigits(text);
+  if (digits == null) return null;
+  var value = 0;
+  for (final d in digits) {
+    value = value * kRadix + d;
+  }
+  return value;
+}
 
 /// ------------------------------------------------------------------
-/// Tail-sentinel BigInt  (compact, loss-free)
-//  Layout:  <payload digits …>  <length digit 0-26>
-//
-//  During decode we pop the last base-27 digit, check that it matches
-//  the payload length, and recover the original word – including any
-//  leading '0' symbols.
-//
-//  Max safe length with a one-digit sentinel is 26.  For longer words
-//  you can either store a two-digit length sentinel, or use CSV/fixed.
-// ------------------------------------------------------------------
+/// Tail-sentinel BigInt
+/// Layout: <payload digits…> <length digit>
+/// ------------------------------------------------------------------
 BigInt? encodeBigIntTail(String text) {
   final payload = stringToDigits(text);
   if (payload == null) return null;
   if (payload.length > 26) {
-    throw ArgumentError(
-        'Tail-sentinel BigInt supports ≤26 symbols (got ${payload.length})');
+    throw ArgumentError('Tail-sentinel supports ≤26 symbols.');
   }
 
   BigInt n = BigInt.zero;
@@ -100,21 +104,8 @@ String? decodeBigIntTail(BigInt n) {
   }
   if (digits.isEmpty) return '';
 
-  final sentinel = digits.removeLast();      // tail digit = length
-  if (sentinel != digits.length) return null; // length mismatch
+  final sentinel = digits.removeLast();
+  if (sentinel != digits.length) return null;
 
   return digitsToString(digits);
-}
-
-/// Quick round-trip self-test (call from your unit test suite)
-void selfTestCodec() {
-  const words = ['0', 'a', '0az', 'xyz', '000', 'livnium'];
-
-  for (final w in words) {
-    final c = decodeCsv(encodeCsv(w)!);
-    final f = decodeFixed(encodeFixed(w)!);
-    final b = decodeBigIntTail(encodeBigIntTail(w)!);
-    assert(w == c && w == f && w == b,
-    'Codec mismatch on "$w": csv $c, fixed $f, bigint $b');
-  }
 }
