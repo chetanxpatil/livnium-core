@@ -87,9 +87,81 @@ class _Entry {
   }) : nextTime = 0;
 }
 
+
+class Vec3 {
+  final int x, y, z;
+  const Vec3(this.x, this.y, this.z);
+  @override
+  bool operator ==(Object other) =>
+      other is Vec3 && x == other.x && y == other.y && z == other.z;
+  @override
+  int get hashCode => Object.hash(x, y, z);
+}
+
+void printFace(String name, int axis, int sign, Map<String, Vec3> coords) {
+  print('Face: $name');
+  for (int rowY = 1; rowY >= -1; rowY--) {
+    String row = '';
+    for (int colX = -1; colX <= 1; colX++) {
+      Vec3 target = const Vec3(0, 0, 0); // default init
+      if (axis == 2) target = Vec3(colX, rowY, sign);      // Z face
+      if (axis == 0) target = Vec3(sign, rowY, -colX);     // X face
+      if (axis == 1) target = Vec3(colX, sign, -rowY);     // Y face
+
+      final match = coords.entries
+          .firstWhere((e) => e.value == target, orElse: () => MapEntry(' ', const Vec3(0,0,0)))
+          .key;
+      row += ' ${match.padRight(1)} ';
+    }
+    print(row);
+  }
+  print('');
+}
+
+
+void printAllFaces(Map<String, Vec3> coords) {
+  printFace('Up (Z=+1)', 2, 1, coords);
+  printFace('Down (Z=-1)', 2, -1, coords);
+  printFace('Left (X=-1)', 0, -1, coords);
+  printFace('Right (X=+1)', 0, 1, coords);
+  printFace('Front (Y=+1)', 1, 1, coords);
+  printFace('Back (Y=-1)', 1, -1, coords);
+}
+
+
 void main() {
   final exposure = generateExposureMapping();
+
+  // Print mapping
   for (final entry in exposure.entries) {
     print('${entry.key} → faces=${entry.value.$1}, side=${entry.value.$2}');
   }
+
+  // Build coordinates map
+  final coords = <String, Vec3>{};
+  for (final entry in exposure.entries) {
+    coords[entry.key] = _sideToVec3(entry.value.$2);
+  }
+
+  // Print cube layout
+  printAllFaces(coords);
+}
+
+
+Vec3 _sideToVec3(String side) {
+  if (side == 'CORE') return const Vec3(0, 0, 0);
+
+  int x = 0, y = 0, z = 0;
+  final matches = RegExp(r'([+-][XYZ])').allMatches(side);
+  for (final m in matches) {
+    switch (m.group(0)) {
+      case '+X': x = 1; break;
+      case '-X': x = -1; break;
+      case '+Y': y = 1; break;
+      case '-Y': y = -1; break;
+      case '+Z': z = 1; break;
+      case '-Z': z = -1; break;
+    }
+  }
+  return Vec3(x, y, z);
 }

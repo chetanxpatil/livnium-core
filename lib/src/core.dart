@@ -39,7 +39,15 @@ class LivniumCore {
   /// Compute total symbolic energy for a Livnium word.
   double symbolicEnergy(String word) => energy.symbolicEnergy(word);
 
-  /// Example helper to rotate a coordinate around the Z axis.
+  /// Rotate a coordinate around the Z axis.
   Vec3 rotateZ(Vec3 v, [int quarterTurns = 1]) =>
       rotateZQuarter(v, quarterTurns);
+
+  /// Rotate a coordinate around the X axis.
+  Vec3 rotateX(Vec3 v, [int quarterTurns = 1]) =>
+      rotateXQuarter(v, quarterTurns);
+
+  /// Rotate a coordinate around the Y axis.
+  Vec3 rotateY(Vec3 v, [int quarterTurns = 1]) =>
+      rotateYQuarter(v, quarterTurns);
 }
