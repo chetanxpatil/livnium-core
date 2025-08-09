@@ -86,13 +86,14 @@ BigInt? encodeBigIntTail(String text) {
   if (payload.length > 26) {
     throw ArgumentError('Tail-sentinel supports ≤26 symbols.');
   }
-
+  // Ensure we shift enough to keep leading zeros
   BigInt n = BigInt.zero;
   for (final d in [...payload, payload.length]) {
     n = n * _k27 + BigInt.from(d);
   }
   return n;
 }
+
 
 String? decodeBigIntTail(BigInt n) {
   if (n == BigInt.zero) return '';
@@ -102,10 +103,10 @@ String? decodeBigIntTail(BigInt n) {
     digits.insert(0, (m % _k27).toInt());
     m ~/= _k27;
   }
-  if (digits.isEmpty) return '';
-
   final sentinel = digits.removeLast();
+  while (digits.length < sentinel) { // restore leading 0's
+    digits.insert(0, 0);
+  }
   if (sentinel != digits.length) return null;
-
   return digitsToString(digits);
 }
