@@ -1,63 +1,64 @@
-// lib/src/alphabet.dart
-// --------------------
-// Livnium Core – Base-27 Symbol Alphabet
-//
-// Digit-set: '0', 'a' … 'z' → values 0 … 26
-// This is a positional numeral system: "a0" = 27 decimal.
-// (No special single-symbol token for 27; use multi-digit representation.)
-//
-// This file is *pure data + helpers*. Higher-level encoders/decoders
-// live in `codec.dart`.
-
 library;
 
-/// Radix of the Livnium number system.
+/// Livnium alphabet (clean base-27, no composite digits).
+/// '0' → 0, 'a'..'z' → 1..26
 const int kRadix = 27;
 
-/// Ordered symbol list (index == numeric value).
-const List<String> kSymbols = [
-  '0', //
-  'a', 'b', 'c', 'd', 'e', 'f',
-  'g', 'h', 'i', 'j', 'k', 'l', 'm', 'n', 'o', 'p',
-  'q', 'r', 's', 't', 'u', 'v', 'w', 'x', 'y', 'z',
-];
-
-/// Map single-character symbol → integer value.
-final Map<String, int> symbolToValue = {
-  for (int i = 0; i < kSymbols.length; i++) kSymbols[i]: i,
+const Map<String, int> _symbolToValue = {
+  '0': 0,
+  'a': 1,
+  'b': 2,
+  'c': 3,
+  'd': 4,
+  'e': 5,
+  'f': 6,
+  'g': 7,
+  'h': 8,
+  'i': 9,
+  'j': 10,
+  'k': 11,
+  'l': 12,
+  'm': 13,
+  'n': 14,
+  'o': 15,
+  'p': 16,
+  'q': 17,
+  'r': 18,
+  's': 19,
+  't': 20,
+  'u': 21,
+  'v': 22,
+  'w': 23,
+  'x': 24,
+  'y': 25,
+  'z': 26,
 };
 
-/// Map integer value → single-character symbol.
-final Map<int, String> valueToSymbol = {
-  for (int i = 0; i < kSymbols.length; i++) i: kSymbols[i],
+final Map<int, String> _valueToSymbol = {
+  for (final e in _symbolToValue.entries) e.value: e.key,
 };
 
-/// Convert *one* symbol to its digit value.
-/// Returns `null` if the character is not in the alphabet.
-int? charToDigit(String ch) => symbolToValue[ch];
+int? symbolToValue(String ch) => _symbolToValue[ch];
+String? valueToSymbol(int v) => _valueToSymbol[v];
 
-/// Convert *one* digit (0‥26) to a symbol.
-/// Returns `null` if `v` is outside range.
-String? digitToChar(int v) => valueToSymbol[v];
-
-/// Convert `"0az"` → `[0, 1, 26]`.
 List<int>? stringToDigits(String text) {
   final out = <int>[];
   for (final ch in text.split('')) {
-    final d = charToDigit(ch);
-    if (d == null) return null;
-    out.add(d);
+    final v = symbolToValue(ch);
+    if (v == null) return null;
+    out.add(v);
   }
   return out;
 }
 
-/// Convert `[0, 1, 26]` → `"0az"`.
-String? digitsToString(Iterable<int> digits) {
-  final buffer = StringBuffer();
+String? digitsToString(List<int> digits) {
+  final buf = StringBuffer();
   for (final d in digits) {
-    final ch = digitToChar(d);
-    if (ch == null) return null;
-    buffer.write(ch);
+    final s = valueToSymbol(d);
+    if (s == null) return null;
+    buf.write(s);
   }
-  return buffer.toString();
+  return buf.toString();
 }
+
+bool isValidWord(String text) => stringToDigits(text) != null;
