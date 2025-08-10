@@ -1,5 +1,6 @@
 library;
 
+import 'dart:math' as math;
 import 'vec3.dart';
 
 /// Iterate all integer coords in {-1,0,1}^3 (27 points).
@@ -19,9 +20,9 @@ int exposure(Vec3 v) =>
     (v.x != 0 ? 1 : 0) + (v.y != 0 ? 1 : 0) + (v.z != 0 ? 1 : 0);
 
 /// Classification helpers built off [exposure].
-bool isCore(Vec3 v)   => exposure(v) == 0;
+bool isCore(Vec3 v) => exposure(v) == 0;
 bool isCenter(Vec3 v) => exposure(v) == 1;
-bool isEdge(Vec3 v)   => exposure(v) == 2;
+bool isEdge(Vec3 v) => exposure(v) == 2;
 bool isCorner(Vec3 v) => exposure(v) == 3;
 
 /// Backwards-compatible name: number of visible faces for that position.
@@ -32,29 +33,18 @@ int facesForVec3(Vec3 v) {
 }
 
 /// Optional geometry helpers you’ll likely use elsewhere.
-int l1(Vec3 v) => v.x.abs() + v.y.abs() + v.z.abs();                       // Manhattan
-int linf(Vec3 v) => [v.x.abs(), v.y.abs(), v.z.abs()].reduce((a, b) => a > b ? a : b); // Chebyshev
-double l2(Vec3 v) => (v.x * v.x + v.y * v.y + v.z * v.z).toDouble().sqrt();
-
-extension on double {
-  double sqrt() => MathSqrt(this);
-}
-
-// Minimal local sqrt to avoid pulling in dart:math everywhere else.
-// If you already import 'dart:math' somewhere, replace with sqrt(x).
-double MathSqrt(double x) {
-  // Newton–Raphson for a couple of iterations (good enough for small ints)
-  if (x <= 0) return 0.0;
-  double r = x;
-  for (int i = 0; i < 8; i++) r = 0.5 * (r + x / r);
-  return r;
-}
+int l1(Vec3 v) => v.x.abs() + v.y.abs() + v.z.abs(); // Manhattan
+int linf(Vec3 v) => [v.x.abs(), v.y.abs(), v.z.abs()]
+    .reduce((a, b) => a > b ? a : b); // Chebyshev
+double l2(Vec3 v) => math.sqrt(
+      (v.x * v.x + v.y * v.y + v.z * v.z).toDouble(),
+    );
 
 /// Convenience: filtered lists (non-alloc heavy if you reuse results).
-List<Vec3> corePoints()   => cube3Coords().where(isCore).toList();
-List<Vec3> centers()      => cube3Coords().where(isCenter).toList();
-List<Vec3> edges()        => cube3Coords().where(isEdge).toList();
-List<Vec3> corners()      => cube3Coords().where(isCorner).toList();
+List<Vec3> corePoints() => cube3Coords().where(isCore).toList();
+List<Vec3> centers() => cube3Coords().where(isCenter).toList();
+List<Vec3> edges() => cube3Coords().where(isEdge).toList();
+List<Vec3> corners() => cube3Coords().where(isCorner).toList();
 
 /// Quick invariants. Call from a demo/test to guard regressions.
 void selfTestGrid() {

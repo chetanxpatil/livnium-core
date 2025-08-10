@@ -4,12 +4,11 @@ import 'alphabet.dart';
 import 'codec.dart';
 import 'grid.dart';
 import 'rotation.dart';
-import 'vec3.dart';
 import 'energy.dart';
 
 bool runAllSelfChecks() {
   // alphabet round-trip
-  const samples = ['0', 'abc', 'z', '0az', 'livnium'];
+  const samples = ['', '0', 'abc', 'z', '0az', 'livnium'];
   for (final w in samples) {
     final ds = stringToDigits(w);
     if (ds == null) return false;
@@ -62,13 +61,12 @@ bool runAllSelfChecks() {
       cent++;
     else if (isEdge(v))
       edge++;
-    else if (isCorner(v))
-      corn++;
+    else if (isCorner(v)) corn++;
   }
   if (!(core == 1 && cent == 6 && edge == 12 && corn == 8)) return false;
 
   // energy basics
-  if (equilibriumConstant() != 10.125) return false;
+  if (equilibriumConstant != 10.125) return false;
   if (perFaceUnitEnergy(1) != 10.125) return false;
   if (perFaceUnitEnergy(2) != 5.0625) return false;
   if (perFaceUnitEnergy(3) != 3.375) return false;

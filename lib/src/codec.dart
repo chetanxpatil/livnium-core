@@ -177,7 +177,6 @@
 //   return digitsToString(ds);
 // }
 
-
 library;
 
 /// Livnium Core – loss-free serialisation helpers.
@@ -206,6 +205,7 @@ String? encodeCsv(String text, {String sep = ','}) =>
 
 /// Decode CSV back into text.  "1,2,3" → "abc"
 String? decodeCsv(String csv, {String sep = ','}) {
+  if (csv.isEmpty) return '';
   late final List<int> digits;
   try {
     digits = csv.split(sep).map(int.parse).toList();
@@ -226,7 +226,8 @@ String? encodeFixed(String text) =>
 
 String? decodeFixed(String numeric) {
   final n = numeric.length;
-  if (n == 0 || (n & 1) == 1) return null;
+  if (n == 0) return '';
+  if ((n & 1) == 1) return null;
 
   // Fast digit check (no RegExp)
   for (var i = 0; i < n; i++) {
@@ -245,10 +246,15 @@ String? decodeFixed(String numeric) {
   return digitsToString(ds);
 }
 
-/// Convenience: encode to int (fits only if the string is short)
-int? encodeFixedInt(String text) => int.tryParse(encodeFixed(text) ?? '');
+/// Each glyph encodes to two decimal digits. A signed 64-bit int can hold at
+/// most 18 decimal digits, so the input is limited to 9 glyphs. Returns `null`
+/// if the encoded value would exceed that.
+int? encodeFixedInt(String text) {
+  if (text.length > 9) return null;
+  return int.tryParse(encodeFixed(text) ?? '');
+}
 
-/// Decode a 64-bit int via fixed-width numeric.
+/// Decodes a 64-bit int produced by [encodeFixedInt].
 String? decodeFixedInt(int value) {
   final s = value.toString();
   final even = (s.length + 1) & ~1; // round to even
@@ -313,7 +319,16 @@ String? decodeDecimal(String decimal) {
   return decodeBigIntTail(n);
 }
 
-int? encodeDecimalInt(String text) => int.tryParse(encodeDecimal(text) ?? '');
+/// Encode to a decimal string and parse as 64-bit int. Returns `null` if the
+/// decimal representation would exceed 19 digits (signed 64-bit limit).
+int? encodeDecimalInt(String text) {
+  final dec = encodeDecimal(text);
+  if (dec == null) return null;
+  if (dec.length > 19) return null;
+  return int.tryParse(dec);
+}
+
+/// Decodes a decimal int produced by [encodeDecimalInt].
 String? decodeDecimalInt(int value) => decodeDecimal(value.toString());
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -344,12 +359,12 @@ String? decodeBigIntRaw(BigInt n, {required int length}) {
 
 /// Quick self-test (optional)
 void selfTestCodec() {
-  const samples = ['','0','a','0az','xyz','000','livnium'];
+  const samples = ['', '0', 'a', '0az', 'xyz', '000', 'livnium'];
   for (final w in samples) {
     final c = decodeCsv(encodeCsv(w)!);
     final f = decodeFixed(encodeFixed(w)!);
     final bt = decodeBigIntTail(encodeBigIntTail(w)!);
     assert(w == c && w == f && w == bt,
-    'Codec mismatch on "$w": csv=$c fixed=$f bigTail=$bt');
+        'Codec mismatch on "$w": csv=$c fixed=$f bigTail=$bt');
   }
 }

@@ -1,4 +1,3 @@
-import 'package:livnium_core/livnium_core.dart';
 import 'package:livnium_core/src/energy.dart';
 
 void main() {
@@ -12,7 +11,7 @@ void main() {
   for (final w in words) {
     print('$w  wordEnergy=${wordEnergy(w)}');
   }
-  print('K = ${equilibriumConstant()}');
+  print('K = $equilibriumConstant');
   print(
     'perFace: f1=${perFaceUnitEnergy(1)} f2=${perFaceUnitEnergy(2)} f3=${perFaceUnitEnergy(3)}',
   );

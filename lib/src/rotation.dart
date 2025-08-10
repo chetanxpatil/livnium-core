@@ -2,6 +2,7 @@ library;
 
 import 'vec3.dart';
 
+/// Right-hand-rule quarter turns. +90° around an axis follows the RH convention.
 enum RotationAxis { x, y, z }
 
 class Rotation {
@@ -14,7 +15,9 @@ class Rotation {
 
 Vec3 rotateX(Vec3 v) => Vec3(v.x, -v.z, v.y);
 Vec3 rotateY(Vec3 v) => Vec3(v.z, v.y, -v.x);
-Vec3 rotateZ(Vec3 v) => Vec3(v.y, -v.x, v.z);
+
+/// Right-hand rule, +90°: (x, y, z) -> (-y, x, z)
+Vec3 rotateZ(Vec3 v) => Vec3(-v.y, v.x, v.z);
 
 Vec3 _applyOnce(Vec3 v, RotationAxis a) {
   switch (a) {
