@@ -1,4 +1,5 @@
 import 'package:livnium_core/livnium_core.dart';
+import 'package:livnium_core/src/energy.dart';
 
 void main() {
   final glyphs = ['0', 'a', 'f', 'g', 'r', 's', 'z'];
@@ -15,4 +16,6 @@ void main() {
   print(
     'perFace: f1=${perFaceUnitEnergy(1)} f2=${perFaceUnitEnergy(2)} f3=${perFaceUnitEnergy(3)}',
   );
+
+  selfTestSymbolEnergy();
 }
