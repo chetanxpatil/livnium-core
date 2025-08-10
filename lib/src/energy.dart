@@ -13,7 +13,7 @@ enum SymbolClass { core, center, edge, corner }
 
 /// Internal value ranges for each class (inclusive).
 const _kCenterRange = (min: 1, max: 6);
-const _kEdgeRange   = (min: 7, max: 18);
+const _kEdgeRange = (min: 7, max: 18);
 const _kCornerRange = (min: 19, max: 26);
 
 /// Returns the exposure class for a single glyph.
@@ -27,7 +27,7 @@ int facesForGlyph(String ch) {
   final v = symbolToValue(ch);
   if (v == null) return -1;
   if (v >= _kCenterRange.min && v <= _kCenterRange.max) return 1;
-  if (v >= _kEdgeRange.min   && v <= _kEdgeRange.max)   return 2;
+  if (v >= _kEdgeRange.min && v <= _kEdgeRange.max) return 2;
   if (v >= _kCornerRange.min && v <= _kCornerRange.max) return 3;
   return -1;
 }
@@ -48,7 +48,7 @@ SymbolClass? symbolClassForGlyph(String ch) {
 bool isValidGlyph(String ch) => facesForGlyph(ch) >= 0;
 
 /// Equilibrium constant (harmonic signature of 3×3×3 structure).
-double equilibriumConstant() => 10.125;
+const double equilibriumConstant = 27 / 8 + 27 / 12 + 27 / 6; // 10.125
 
 /// Per-face “unit energy” per your Concentration Law:
 ///   unit(faces) = 10.125 / faces   for faces ∈ {1,2,3}.
@@ -56,7 +56,7 @@ double perFaceUnitEnergy(int faces) {
   if (faces <= 0 || faces > 3) {
     throw ArgumentError('faces must be 1..3');
   }
-  return equilibriumConstant() / faces;
+  return equilibriumConstant / faces;
 }
 
 /// Symbol Energy (SE) by class:
@@ -66,18 +66,18 @@ double perFaceUnitEnergy(int faces) {
 ///   edge   (2 face) → 18
 ///   corner (3 face) → 27
 /// core (0 face) gets 0 by definition here.
-double symbolEnergy(String ch) {
+double? symbolEnergy(String ch) {
   final f = facesForGlyph(ch);
-  if (f < 0) return 0; // invalid glyph
+  if (f < 0) return null; // invalid glyph
   return (f / 3.0) * 27.0;
 }
 
 /// Sum energy across a word; returns 0 if any glyph is invalid.
-double wordEnergy(String word) {
+double? wordEnergy(String word) {
   double total = 0;
   for (final ch in word.split('')) {
     final e = symbolEnergy(ch);
-    if (e == 0 && symbolToValue(ch) == null) return 0; // invalid glyph shortcut
+    if (e == null) return null;
     total += e;
   }
   return total;
@@ -87,13 +87,26 @@ double wordEnergy(String word) {
 void selfTestSymbolEnergy() {
   // Class boundaries
   assert(facesForGlyph('0') == 0);
-  for (final ch in ['a','b','c','d','e','f']) {
+  for (final ch in ['a', 'b', 'c', 'd', 'e', 'f']) {
     assert(facesForGlyph(ch) == 1);
   }
-  for (final ch in ['g','h','i','j','k','l','m','n','o','p','q','r']) {
+  for (final ch in [
+    'g',
+    'h',
+    'i',
+    'j',
+    'k',
+    'l',
+    'm',
+    'n',
+    'o',
+    'p',
+    'q',
+    'r'
+  ]) {
     assert(facesForGlyph(ch) == 2);
   }
-  for (final ch in ['s','t','u','v','w','x','y','z']) {
+  for (final ch in ['s', 't', 'u', 'v', 'w', 'x', 'y', 'z']) {
     assert(facesForGlyph(ch) == 3);
   }
 
@@ -102,6 +115,7 @@ void selfTestSymbolEnergy() {
   assert(symbolEnergy('g') == 18.0);
   assert(symbolEnergy('s') == 27.0);
   assert(symbolEnergy('0') == 0.0);
+  assert(symbolEnergy('?') == null);
 
   // Per-face unit energy sanity
   assert(perFaceUnitEnergy(1) == 10.125);
@@ -110,6 +124,7 @@ void selfTestSymbolEnergy() {
 
   // Word energy examples
   assert(wordEnergy('a') == 9.0);
-  assert(wordEnergy('ag') == 27.0);   // 9 + 18
-  assert(wordEnergy('as') == 36.0);   // 9 + 27
+  assert(wordEnergy('ag') == 27.0); // 9 + 18
+  assert(wordEnergy('as') == 36.0); // 9 + 27
+  assert(wordEnergy('a?') == null);
 }

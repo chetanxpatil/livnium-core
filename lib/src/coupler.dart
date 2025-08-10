@@ -1,8 +1,9 @@
 library;
 
 import 'dart:math';
-import 'grid.dart'; // exposes facesForVec3(Vec3) and cube3Coords()
+import 'grid.dart'; // facesForVec3, cube3Coords, l1()
 import 'vec3.dart';
+import 'energy.dart' show equilibriumConstant;
 
 /// Tunable parameters for the coupling model.
 class CouplerParams {
@@ -16,11 +17,6 @@ class CouplerParams {
 
   const CouplerParams({this.tau0 = 1.0, this.alpha = 1.0});
 }
-
-/// Manhattan (L1) distance from the core (0,0,0).
-/// We special-case the core to return 0 without adding branch cost.
-int _l1(Vec3 v) =>
-    v == const Vec3(0, 0, 0) ? 0 : v.x.abs() + v.y.abs() + v.z.abs();
 
 /// Coupling magnitude for a position v under parameters p.
 ///
@@ -39,9 +35,9 @@ int _l1(Vec3 v) =>
 ///   - We guard L=0 to avoid division by zero (though faces==0 case early-returns).
 double couplingAt(Vec3 v, CouplerParams p) {
   final faces = facesForVec3(v); // 3,2,1 for non-core; 0 for core
-  if (faces <= 0) return 0.0;    // no coupling defined for the core
-  final L = _l1(v);              // 1..3 for the 26 non-core points in {-1,0,1}^3
-  final base = 10.125 / faces;   // exposure weighting (corner < edge < face)
+  if (faces <= 0) return 0.0; // no coupling defined for the core
+  final L = l1(v); // 1..3 for the 26 non-core points
+  final base = equilibriumConstant / faces; // exposure weighting
   final loss = pow(L.toDouble(), p.alpha); // path-loss
   return p.tau0 * base / (loss == 0 ? 1.0 : loss);
 }
@@ -52,24 +48,24 @@ double couplingAt(Vec3 v, CouplerParams p) {
 ///   - C     : coupling magnitude
 ///   - L     : L1 distance
 ///   - faces : exposure class (3/2/1)
-List<(Vec3 pos, double C, int L, int faces)> rankTopCouplers(
-    CouplerParams p,
-    int topN,
-    ) {
-  final items = <(Vec3, double, int, int)>[];
+List<({Vec3 pos, double C, int L, int faces})> rankTopCouplers(
+  CouplerParams p,
+  int topN,
+) {
+  final items = <({Vec3 pos, double C, int L, int faces})>[];
 
   for (final v in cube3Coords()) {
     if (v == const Vec3(0, 0, 0)) continue; // skip core
     final faces = facesForVec3(v);
-    if (faces <= 0) continue;               // defensive
-    final L = _l1(v);
+    if (faces <= 0) continue; // defensive
+    final L = l1(v);
     final C = couplingAt(v, p);
-    items.add((v, C, L, faces));
+    items.add((pos: v, C: C, L: L, faces: faces));
   }
 
   // Sort by magnitude descending. If you want stable ordering among ties,
   // add a tiebreaker (e.g., L ascending, faces descending, lexicographic pos).
-  items.sort((a, b) => b.$2.compareTo(a.$2));
+  items.sort((a, b) => b.C.compareTo(a.C));
 
   return items.take(topN).toList(growable: false);
 }

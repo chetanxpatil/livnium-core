@@ -97,30 +97,70 @@ library;
 
 const int kRadix = 27; // 0..26
 
-// Fast digit→glyph table (index = digit)
+/// Fast digit→glyph table (index = digit). Publicly exported as [kSymbols].
 const List<String> _kDigitToSymbol = [
-  '0','a','b','c','d','e','f','g','h','i','j','k','l',
-  'm','n','o','p','q','r','s','t','u','v','w','x','y','z'
+  '0',
+  'a',
+  'b',
+  'c',
+  'd',
+  'e',
+  'f',
+  'g',
+  'h',
+  'i',
+  'j',
+  'k',
+  'l',
+  'm',
+  'n',
+  'o',
+  'p',
+  'q',
+  'r',
+  's',
+  't',
+  'u',
+  'v',
+  'w',
+  'x',
+  'y',
+  'z'
 ];
+
+/// Public view used across the library. Single source of truth.
+const List<String> kSymbols = _kDigitToSymbol;
 
 // Symbol→digit map (kept private; public API uses helpers below)
 const Map<String, int> _symbolToValue = {
   '0': 0,
-  'a': 1,  'b': 2,  'c': 3,  'd': 4,  'e': 5,  'f': 6,
-  'g': 7,  'h': 8,  'i': 9,  'j': 10, 'k': 11, 'l': 12,
-  'm': 13, 'n': 14, 'o': 15, 'p': 16, 'q': 17, 'r': 18,
-  's': 19, 't': 20, 'u': 21, 'v': 22, 'w': 23, 'x': 24,
-  'y': 25, 'z': 26,
+  'a': 1,
+  'b': 2,
+  'c': 3,
+  'd': 4,
+  'e': 5,
+  'f': 6,
+  'g': 7,
+  'h': 8,
+  'i': 9,
+  'j': 10,
+  'k': 11,
+  'l': 12,
+  'm': 13,
+  'n': 14,
+  'o': 15,
+  'p': 16,
+  'q': 17,
+  'r': 18,
+  's': 19,
+  't': 20,
+  'u': 21,
+  'v': 22,
+  'w': 23,
+  'x': 24,
+  'y': 25,
+  'z': 26,
 };
-
-@pragma('vm:prefer-inline')
-int? _codeUnitToDigit(int cu) {
-  // '0'
-  if (cu == 0x30) return 0;
-  // 'a'..'z'
-  if (cu >= 0x61 && cu <= 0x7A) return cu - 0x60; // 97..122 → 1..26
-  return null;
-}
 
 /// Convert one glyph (e.g. `'c'`) to its digit (e.g. `3`).
 /// Returns `null` if `ch` is not exactly one of: `0` or `a`..`z`.
@@ -140,10 +180,9 @@ String? valueToSymbol(int v) {
 /// Example: `"cat"` → `[3, 1, 20]`.
 /// Returns `null` if any character is invalid.
 List<int>? stringToDigits(String text) {
-  final units = text.codeUnits;
-  final out = List<int>.filled(units.length, 0, growable: false);
-  for (var i = 0; i < units.length; i++) {
-    final v = _codeUnitToDigit(units[i]);
+  final out = List<int>.filled(text.length, 0, growable: false);
+  for (var i = 0; i < text.length; i++) {
+    final v = symbolToValue(text[i]);
     if (v == null) return null;
     out[i] = v;
   }

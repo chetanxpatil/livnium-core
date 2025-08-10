@@ -1,212 +1,45 @@
-// /// lib/src/generate_mapping.dart
-// /// -----------------------------
-// /// Auto-generates the Livnium symbol → face-exposure + side mapping
-// /// using harmonic steps from the cube's equilibrium constant.
-// library;
-//
-// const double equilibriumConstant = 27 / 8 + 27 / 12 + 27 / 6; // 10.125
-//
-// /// Cube geometry counts
-// const int _coreCount = 1;
-// const int _centreCount = 6; // 1 face visible
-// const int _edgeCount = 12;  // 2 faces visible
-// const int _cornerCount = 8; // 3 faces visible
-//
-// /// The symbol list in order (0, a–z)
-// const List<String> kSymbols = [
-//   '0', //
-//   'a', 'b', 'c', 'd', 'e', 'f',
-//   'g', 'h', 'i', 'j', 'k', 'l', 'm', 'n', 'o', 'p',
-//   'q', 'r', 's', 't', 'u', 'v', 'w', 'x', 'y', 'z',
-// ];
-//
-// /// Predefined sides for each position type
-// /// These will loop if count > available side labels
-// const List<String> _centreSides = ['+X', '-X', '+Y', '-Y', '+Z', '-Z'];
-// const List<String> _edgeSides = [
-//   '+X+Y', '+X-Y', '-X+Y', '-X-Y',
-//   '+X+Z', '+X-Z', '-X+Z', '-X-Z',
-//   '+Y+Z', '+Y-Z', '-Y+Z', '-Y-Z',
-// ];
-// const List<String> _cornerSides = [
-//   '+X+Y+Z', '+X+Y-Z', '+X-Y+Z', '+X-Y-Z',
-//   '-X+Y+Z', '-X+Y-Z', '-X-Y+Z', '-X-Y-Z',
-// ];
-//
-// /// Generate the mapping: symbol → {faces, side}
-// Map<String, (int faces, String side)> generateExposureMapping() {
-//   // Step sizes for each group based on harmonic spacing
-//   final double stepCorner = equilibriumConstant / _cornerCount;
-//   final double stepEdge   = equilibriumConstant / _edgeCount;
-//   final double stepCentre = equilibriumConstant / _centreCount;
-//
-//   // Priority queue simulation
-//   final queue = <_Entry>[
-//     _Entry(step: stepCorner, faces: 3, remaining: _cornerCount, sideList: _cornerSides),
-//     _Entry(step: stepEdge,   faces: 2, remaining: _edgeCount,   sideList: _edgeSides),
-//     _Entry(step: stepCentre, faces: 1, remaining: _centreCount, sideList: _centreSides),
-//   ];
-//
-//   final mapping = <String, (int faces, String side)>{};
-//
-//   // Core is always first
-//   mapping[kSymbols[0]] = (0, 'CORE');
-//
-//   // Fill the rest of the 26 positions
-//   int symbolIndex = 1;
-//
-//   while (queue.any((e) => e.remaining > 0)) {
-//     queue.sort((a, b) => a.nextTime.compareTo(b.nextTime));
-//     final current = queue.first;
-//
-//     // Assign next symbol to this group with next side label
-//     final sideLabel = current.sideList[
-//     (current.sideIndex++ % current.sideList.length)
-//     ];
-//     mapping[kSymbols[symbolIndex++]] = (current.faces, sideLabel);
-//
-//     current.remaining--;
-//     current.nextTime += current.step;
-//   }
-//
-//   return mapping;
-// }
-//
-// class _Entry {
-//   final double step;
-//   final int faces;
-//   int remaining;
-//   double nextTime;
-//   final List<String> sideList;
-//   int sideIndex = 0;
-//   _Entry({
-//     required this.step,
-//     required this.faces,
-//     required this.remaining,
-//     required this.sideList,
-//   }) : nextTime = 0;
-// }
-//
-//
-// class Vec3 {
-//   final int x, y, z;
-//   const Vec3(this.x, this.y, this.z);
-//   @override
-//   bool operator ==(Object other) =>
-//       other is Vec3 && x == other.x && y == other.y && z == other.z;
-//   @override
-//   int get hashCode => Object.hash(x, y, z);
-// }
-//
-// void printFace(String name, int axis, int sign, Map<String, Vec3> coords) {
-//   print('Face: $name');
-//   for (int rowY = 1; rowY >= -1; rowY--) {
-//     String row = '';
-//     for (int colX = -1; colX <= 1; colX++) {
-//       Vec3 target = const Vec3(0, 0, 0); // default init
-//       if (axis == 2) target = Vec3(colX, rowY, sign);      // Z face
-//       if (axis == 0) target = Vec3(sign, rowY, -colX);     // X face
-//       if (axis == 1) target = Vec3(colX, sign, -rowY);     // Y face
-//
-//       final match = coords.entries
-//           .firstWhere((e) => e.value == target, orElse: () => MapEntry(' ', const Vec3(0,0,0)))
-//           .key;
-//       row += ' ${match.padRight(1)} ';
-//     }
-//     print(row);
-//   }
-//   print('');
-// }
-//
-//
-// void printAllFaces(Map<String, Vec3> coords) {
-//   printFace('Up (Z=+1)', 2, 1, coords);
-//   printFace('Down (Z=-1)', 2, -1, coords);
-//   printFace('Left (X=-1)', 0, -1, coords);
-//   printFace('Right (X=+1)', 0, 1, coords);
-//   printFace('Front (Y=+1)', 1, 1, coords);
-//   printFace('Back (Y=-1)', 1, -1, coords);
-// }
-//
-//
-// void main() {
-//   final exposure = generateExposureMapping();
-//
-//   // Print mapping
-//   for (final entry in exposure.entries) {
-//     print('${entry.key} → faces=${entry.value.$1}, side=${entry.value.$2}');
-//   }
-//
-//   // Build coordinates map
-//   final coords = <String, Vec3>{};
-//   for (final entry in exposure.entries) {
-//     coords[entry.key] = _sideToVec3(entry.value.$2);
-//   }
-//
-//   // Print cube layout
-//   printAllFaces(coords);
-// }
-//
-//
-// Vec3 _sideToVec3(String side) {
-//   if (side == 'CORE') return const Vec3(0, 0, 0);
-//
-//   int x = 0, y = 0, z = 0;
-//   final matches = RegExp(r'([+-][XYZ])').allMatches(side);
-//   for (final m in matches) {
-//     switch (m.group(0)) {
-//       case '+X': x = 1; break;
-//       case '-X': x = -1; break;
-//       case '+Y': y = 1; break;
-//       case '-Y': y = -1; break;
-//       case '+Z': z = 1; break;
-//       case '-Z': z = -1; break;
-//     }
-//   }
-//   return Vec3(x, y, z);
-// }
-
-/// lib/src/generate_mapping.dart
-/// -----------------------------
-/// Generates Livnium symbol → (faces, side) mapping.
-/// Modes:
-///  - "conventional" (default): a..f=centers, g..r=edges, s..z=corners
-///  - "harmonic": interleaved by equilibrium steps with deterministic tie-breaks
 library;
 
-const double equilibriumConstant = 27 / 8 + 27 / 12 + 27 / 6; // 10.125
+import 'alphabet.dart' show kSymbols;
+import 'energy.dart' show equilibriumConstant;
 
-/// Cube geometry counts
-const int _centreCount = 6;  // 1 face visible
-const int _edgeCount   = 12; // 2 faces visible
-const int _cornerCount = 8;  // 3 faces visible
-
-/// The symbol list in order (0, a–z)
-const List<String> kSymbols = [
-  '0',
-  'a','b','c','d','e','f',
-  'g','h','i','j','k','l','m','n','o','p',
-  'q','r','s','t','u','v','w','x','y','z',
-];
+const int _centerCount = 6; // 1 face visible
+const int _edgeCount = 12; // 2 faces visible
+const int _cornerCount = 8; // 3 faces visible
 
 /// Predefined sides for each position type (cycled)
-const List<String> _centreSides = ['+X', '-X', '+Y', '-Y', '+Z', '-Z'];
+const List<String> _centerSides = ['+X', '-X', '+Y', '-Y', '+Z', '-Z'];
 const List<String> _edgeSides = [
-  '+X+Y', '+X-Y', '-X+Y', '-X-Y',
-  '+X+Z', '+X-Z', '-X+Z', '-X-Z',
-  '+Y+Z', '+Y-Z', '-Y+Z', '-Y-Z',
+  '+X+Y',
+  '+X-Y',
+  '-X+Y',
+  '-X-Y',
+  '+X+Z',
+  '+X-Z',
+  '-X+Z',
+  '-X-Z',
+  '+Y+Z',
+  '+Y-Z',
+  '-Y+Z',
+  '-Y-Z',
 ];
 const List<String> _cornerSides = [
-  '+X+Y+Z', '+X+Y-Z', '+X-Y+Z', '+X-Y-Z',
-  '-X+Y+Z', '-X+Y-Z', '-X-Y+Z', '-X-Y-Z',
+  '+X+Y+Z',
+  '+X+Y-Z',
+  '+X-Y+Z',
+  '+X-Y-Z',
+  '-X+Y+Z',
+  '-X+Y-Z',
+  '-X-Y+Z',
+  '-X-Y-Z',
 ];
 
-/// Public API: generate mapping in given mode.
+/// Generate the mapping: symbol → (faces, side).
 Map<String, (int faces, String side)> generateExposureMapping({
-  String mode = 'conventional', // or 'harmonic'
+  String mode = 'conventional',
 }) {
   return switch (mode) {
-    'harmonic'     => _generateHarmonic(),
+    'harmonic' => _generateHarmonic(),
     'conventional' => _generateConventional(),
     _ => throw ArgumentError('Unknown mode: $mode'),
   };
@@ -214,22 +47,22 @@ Map<String, (int faces, String side)> generateExposureMapping({
 
 /// ---------------------- Conventional (grouped) ---------------------------
 Map<String, (int faces, String side)> _generateConventional() {
-  final m = <String,(int,String)>{};
+  final m = <String, (int, String)>{};
   m[kSymbols[0]] = (0, 'CORE');
 
   // a..f → centers
-  for (int i = 0; i < _centreCount; i++) {
+  for (int i = 0; i < _centerCount; i++) {
     final sym = kSymbols[1 + i];
-    m[sym] = (1, _centreSides[i % _centreSides.length]);
+    m[sym] = (1, _centerSides[i % _centerSides.length]);
   }
   // g..r → edges (12)
   for (int i = 0; i < _edgeCount; i++) {
-    final sym = kSymbols[1 + _centreCount + i];
+    final sym = kSymbols[1 + _centerCount + i];
     m[sym] = (2, _edgeSides[i % _edgeSides.length]);
   }
   // s..z → corners (8)
   for (int i = 0; i < _cornerCount; i++) {
-    final sym = kSymbols[1 + _centreCount + _edgeCount + i];
+    final sym = kSymbols[1 + _centerCount + _edgeCount + i];
     m[sym] = (3, _cornerSides[i % _cornerSides.length]);
   }
   return m;
@@ -237,21 +70,30 @@ Map<String, (int faces, String side)> _generateConventional() {
 
 /// ----------------------- Harmonic (interleaved) --------------------------
 int _tiePriorityForFaces(int faces) => switch (faces) {
-  1 => 0, // centers first on exact ties
-  2 => 1,
-  3 => 2,
-  _ => 99,
-};
+      1 => 0,
+      2 => 1,
+      3 => 2,
+      _ => 99,
+    };
 
 Map<String, (int faces, String side)> _generateHarmonic() {
   final stepCorner = equilibriumConstant / _cornerCount;
-  final stepEdge   = equilibriumConstant / _edgeCount;
-  final stepCentre = equilibriumConstant / _centreCount;
+  final stepEdge = equilibriumConstant / _edgeCount;
+  final stepCenter = equilibriumConstant / _centerCount;
 
   final queue = <_Entry>[
-    _Entry(step: stepCorner, faces: 3, remaining: _cornerCount, sideList: _cornerSides),
-    _Entry(step: stepEdge,   faces: 2, remaining: _edgeCount,   sideList: _edgeSides),
-    _Entry(step: stepCentre, faces: 1, remaining: _centreCount, sideList: _centreSides),
+    _Entry(
+        step: stepCorner,
+        faces: 3,
+        remaining: _cornerCount,
+        sideList: _cornerSides),
+    _Entry(
+        step: stepEdge, faces: 2, remaining: _edgeCount, sideList: _edgeSides),
+    _Entry(
+        step: stepCenter,
+        faces: 1,
+        remaining: _centerCount,
+        sideList: _centerSides),
   ];
 
   final mapping = <String, (int faces, String side)>{};
@@ -280,7 +122,7 @@ class _Entry {
   final double step;
   final int faces;
   int remaining;
-  double nextTime = 0.0;
+  double nextTime;
   final List<String> sideList;
   int sideIndex = 0;
   _Entry({
@@ -288,107 +130,68 @@ class _Entry {
     required this.faces,
     required this.remaining,
     required this.sideList,
-  });
+  }) : nextTime = 0;
 }
 
-// ---------------- ASCII cube rendering (unchanged) ------------------------
-
-class Vec3 {
-  final int x, y, z;
-  const Vec3(this.x, this.y, this.z);
-  @override
-  bool operator ==(Object o) => o is Vec3 && x == o.x && y == o.y && z == o.z;
-  @override
-  int get hashCode => Object.hash(x, y, z);
-}
-
-void printFace(String name, int axis, int sign, Map<String, Vec3> coords) {
-  print('Face: $name');
-  for (int rowY = 1; rowY >= -1; rowY--) {
-    var row = '';
-    for (int colX = -1; colX <= 1; colX++) {
-      Vec3 target = const Vec3(0, 0, 0);
-      if (axis == 2) target = Vec3(colX, rowY, sign);   // Z face
-      if (axis == 0) target = Vec3(sign, rowY, -colX);  // X face
-      if (axis == 1) target = Vec3(colX, sign, -rowY);  // Y face
-
-      final match = coords.entries
-          .firstWhere((e) => e.value == target, orElse: () => MapEntry(' ', const Vec3(0,0,0)))
-          .key;
-      row += ' ${match.padRight(1)} ';
-    }
-    print(row);
-  }
-  print('');
-}
-
-void printAllFaces(Map<String, Vec3> coords) {
-  printFace('Up (Z=+1)',    2,  1, coords);
-  printFace('Down (Z=-1)',  2, -1, coords);
-  printFace('Left (X=-1)',  0, -1, coords);
-  printFace('Right (X=+1)', 0,  1, coords);
-  printFace('Front (Y=+1)', 1,  1, coords);
-  printFace('Back (Y=-1)',  1, -1, coords);
-}
-
-Vec3 _sideToVec3(String side) {
-  if (side == 'CORE') return const Vec3(0, 0, 0);
-  int x = 0, y = 0, z = 0;
-  for (final m in RegExp(r'([+-][XYZ])').allMatches(side)) {
-    switch (m.group(0)) {
-      case '+X': x =  1; break;
-      case '-X': x = -1; break;
-      case '+Y': y =  1; break;
-      case '-Y': y = -1; break;
-      case '+Z': z =  1; break;
-      case '-Z': z = -1; break;
-    }
-  }
-  return Vec3(x, y, z);
-}
-
-// ----------------------------- demo main ----------------------------------
-
-void main() {
-  // switch mode here
-  final exposure = generateExposureMapping(mode: 'conventional');
-  // final exposure = generateExposureMapping(mode: 'harmonic');
-
-  // Print mapping
-  for (final e in exposure.entries) {
-    print('${e.key} → faces=${e.value.$1}, side=${e.value.$2}');
-  }
-
-  // Build coordinates map for ASCII faces
-  final coords = <String, Vec3>{};
-  for (final e in exposure.entries) {
-    coords[e.key] = _sideToVec3(e.value.$2);
-  }
-  printAllFaces(coords);
-}
-
-void selfTestConventionalMapping(Map<String,(int faces,String side)> m) {
-  // Counts per class
-  int c1=0,c2=0,c3=0;
+/// Basic invariants for the conventional mapping.
+void selfTestConventionalMapping(Map<String, (int faces, String side)> m) {
+  int c1 = 0, c2 = 0, c3 = 0;
   for (final e in m.entries) {
-    final s = e.key; final f = e.value.$1;
-    if (s == '0') { assert(f == 0); continue; }
-    if (f == 1) c1++; else if (f == 2) c2++; else if (f == 3) c3++; else assert(false);
+    final s = e.key;
+    final f = e.value.$1;
+    if (s == '0') {
+      assert(f == 0);
+      continue;
+    }
+    if (f == 1) {
+      c1++;
+    } else if (f == 2) {
+      c2++;
+    } else if (f == 3) {
+      c3++;
+    } else {
+      assert(false);
+    }
   }
   assert(c1 == 6 && c2 == 12 && c3 == 8);
 
   // Exact symbol ranges
-  for (final s in ['a','b','c','d','e','f'])   { assert(m[s]!.$1 == 1); }
-  for (final s in ['g','h','i','j','k','l','m','n','o','p','q','r']) { assert(m[s]!.$1 == 2); }
-  for (final s in ['s','t','u','v','w','x','y','z']) { assert(m[s]!.$1 == 3); }
+  for (final s in ['a', 'b', 'c', 'd', 'e', 'f']) {
+    assert(m[s]!.$1 == 1);
+  }
+  for (final s in [
+    'g',
+    'h',
+    'i',
+    'j',
+    'k',
+    'l',
+    'm',
+    'n',
+    'o',
+    'p',
+    'q',
+    'r'
+  ]) {
+    assert(m[s]!.$1 == 2);
+  }
+  for (final s in ['s', 't', 'u', 'v', 'w', 'x', 'y', 'z']) {
+    assert(m[s]!.$1 == 3);
+  }
 
   // Side sets uniqueness
   final sides1 = <String>{}, sides2 = <String>{}, sides3 = <String>{};
   m.forEach((sym, v) {
     switch (v.$1) {
-      case 1: assert(sides1.add(v.$2)); break;
-      case 2: assert(sides2.add(v.$2)); break;
-      case 3: assert(sides3.add(v.$2)); break;
+      case 1:
+        assert(sides1.add(v.$2));
+        break;
+      case 2:
+        assert(sides2.add(v.$2));
+        break;
+      case 3:
+        assert(sides3.add(v.$2));
+        break;
     }
   });
   assert(sides1.length == 6 && sides2.length == 12 && sides3.length == 8);
