@@ -1,148 +1,43 @@
-// /// lib/src/energy.dart
-// /// -------------------
-// /// Livnium Core – Symbolic energy calculations
-// ///
-// /// Each symbol has an "exposure" = how many faces are visible on a solved cube.
-// /// Energy is exposure × `unitE` (unit energy per face).
-// ///
-// /// Face exposure mapping:
-// ///   • Core centre (0 faces)   → energy 0
-// ///   • Face centres (1 face)   → energy 9
-// ///   • Edges (2 faces)         → energy 18
-// ///   • Corners (3 faces)       → energy 27
-// ///
-// /// Totals (solved state):
-// ///   • 6 face centres  → 6 × 9  = 54
-// ///   • 12 edges        → 12 × 18 = 216
-// ///   • 8 corners       → 8 × 27 = 216
-// ///   • Sum = 486 total cube energy (invariant under legal rotations)
-//
-// library;
-//
-// /// ---------- constants ----------
-// const int _base = 27;
-// const double _unitE = _base / 3; // 27 / 3 = 9.0 per visible face
-//
-// /// Face exposure table: symbol → number of visible faces
-// ///
-// /// Adjust this to match your canonical cube mapping.
-// /// All non-core symbols must be assigned 1, 2, or 3.
-// const Map<String, int> _exposure = {
-//   // Core centre
-//   '0': 0,
-//
-//   // Corners (3 faces) – 8 total
-//   'a': 3, 'e': 3, 'i': 3, 'l': 3,
-//   'o': 3, 'r': 3, 'v': 3, 'y': 3,
-//
-//   // Edges (2 faces) – 12 total
-//   'b': 2, 'd': 2, 'f': 2, 'h': 2,
-//   'j': 2, 'm': 2, 'n': 2, 'q': 2,
-//   's': 2, 'u': 2, 'w': 2, 'z': 2,
-//
-//   // Face centres (1 face) – 6 total
-//   'c': 1, 'g': 1, 'k': 1,
-//   'p': 1, 't': 1, 'x': 1,
-// };
-//
-// /// ---------- helpers ----------
-//
-// /// Convert visible face count → symbolic energy.
-// double _facesToEnergy(int faces) => faces * _unitE;
-//
-// /// Energy of one symbol. Returns 0 if symbol unknown.
-// double symbolEnergy(String glyph) =>
-//     _facesToEnergy(_exposure[glyph] ?? 0);
-//
-// /// Total symbolic energy of a Livnium word.
-// /// If any glyph is invalid, returns 0.
-// double symbolicEnergy(String word) {
-//   double total = 0;
-//   for (final ch in word.split('')) {
-//     final e = symbolEnergy(ch);
-//     if (e == 0 && !_exposure.containsKey(ch)) {
-//       return 0; // invalid symbol
-//     }
-//     total += e;
-//   }
-//   return total;
-// }
-//
-// /// ---------- cube-wide constants ----------
-//
-// const double centreE = _unitE;      // 9
-// const double edgeE   = 2 * _unitE;  // 18
-// const double cornerE = 3 * _unitE;  // 27
-//
-// const double totalCubeEnergy =
-//     6 * centreE + 12 * edgeE + 8 * cornerE; // 486
-//
-// /// Equilibrium constant = Σ(total cubelets / count by type)
-// const double equilibriumConstant =
-//     27 / 8 + 27 / 12 + 27 / 6; // 10.125
-
-
-// lib/src/energy.dart
 library;
 
-import 'alphabet.dart' show symbolToValue;
+import 'alphabet.dart';
 
-/// Equilibrium constant: unit energy per cubelet (invariant).
-const double kEquilibrium = 10.125;
+/// Symbol exposure classes for glyphs (conventional mapping)
+/// 0 -> core(0 faces); a..f -> centers(1); g..r -> edges(2); s..z -> corners(3).
+enum SymbolClass { core, center, edge, corner }
 
-/// Classification sets (keep consistent with your whitepaper table).
-const Set<String> kCenters = {'x','y','z','i','r','w'}; // f = 1
-const Set<String> kEdges   = {
-  'g','h','i','j','k','l','m','n','o','p','q','r'      // f = 2
-};
-const Set<String> kCorners = {
-  'a','b','c','d','e','f','s','t','u','v','w','x','y','z' // f = 3
-};
-
-/// Number of visible faces for a glyph.
-int facesFor(String ch) {
+int facesForGlyph(String ch) {
   if (ch == '0') return 0;
-  if (kCenters.contains(ch)) return 1;
-  if (kEdges.contains(ch))   return 2;
-  if (kCorners.contains(ch)) return 3;
-  return -1; // invalid glyph
+  final v = symbolToValue(ch);
+  if (v == null) return -1;
+  if (v >= 1 && v <= 6) return 1; // a..f
+  if (v >= 7 && v <= 18) return 2; // g..r
+  if (v >= 19 && v <= 26) return 3; // s..z
+  return -1;
 }
 
-/// Per-face exposure energy K/f (0 for core; null if invalid glyph).
-double? perFaceEnergy(String ch) {
-  final f = facesFor(ch);
-  if (f < 0) return null;          // invalid
-  if (f == 0) return 0.0;          // core: no exposure
-  return kEquilibrium / f;
+/// SE = (faces/3) * 27 → centers 9, edges 18, corners 27
+double symbolEnergy(String ch) {
+  final f = facesForGlyph(ch);
+  if (f < 0) return 0;
+  return (f / 3.0) * 27.0;
 }
 
-/// Per-cubelet exposed energy: K for any visible cubelet, 0 for core.
-/// (We don’t divide by f; the exposure across faces always sums to K.)
-double? perCubeletEnergy(String ch) {
-  final f = facesFor(ch);
-  if (f < 0) return null;          // invalid
-  return f == 0 ? 0.0 : kEquilibrium;
-}
-
-/// Total exposed energy of a Livnium word (ignores invalid glyphs by returning 0).
-double totalExposedEnergy(String word) {
-  double total = 0.0;
+double wordEnergy(String word) {
+  double total = 0;
   for (final ch in word.split('')) {
-    final e = perCubeletEnergy(ch);
-    if (e == null) return 0.0;     // invalid → 0 to signal error
+    final e = symbolEnergy(ch);
+    if (e == 0 && symbolToValue(ch) == null) return 0; // invalid glyph
     total += e;
   }
   return total;
 }
 
-/// Total per-face energy sum (equivalent to totalExposedEnergy, just explicit).
-double totalPerFaceEnergy(String word) {
-  double total = 0.0;
-  for (final ch in word.split('')) {
-    final f = facesFor(ch);
-    if (f < 0) return 0.0;         // invalid
-    if (f == 0) continue;          // core contributes 0 exposure
-    total += f * (kEquilibrium / f); // sums to K per visible cubelet
-  }
-  return total;
+/// Equilibrium constant (harmonic signature)
+double equilibriumConstant() => 10.125;
+
+/// Per-face unit energy (Concentration Law): 10.125 / faces
+double perFaceUnitEnergy(int faces) {
+  if (faces <= 0) throw ArgumentError('faces must be 1..3');
+  return equilibriumConstant() / faces;
 }

@@ -1,99 +1,68 @@
-// lib/src/codec.dart
-// ------------------
-// Livnium Core – loss-free serialisation helpers.
-//
-// Builds on `alphabet.dart` to provide three reversible wire-formats:
-//
-// 1. CSV (numeric)          – human-readable, zero ambiguity
-//    e.g. "0az" → "0,1,26"
-// 2. Fixed-width numeric    – each digit as two decimal chars (00–26)
-//    e.g. "0az" → "000126"
-// 3. Tail-sentinel BigInt   – packs a whole word into a single integer
-//
-// All encoders return `null` on illegal input.
-
 library;
+
+/// Livnium Core – loss-free serialisation helpers.
+/// CSV, fixed-width numeric, and tail-sentinel BigInt.
 
 import 'alphabet.dart';
 
 final _k27 = BigInt.from(kRadix);
 
-/// ------------------------------------------------------------------
-/// CSV (numeric)
-/// "0az" → "0,1,26"
-/// ------------------------------------------------------------------
+/// CSV (human-readable)
 String? encodeCsv(String text, {String sep = ','}) =>
     stringToDigits(text)?.join(sep);
 
 String? decodeCsv(String csv, {String sep = ','}) {
+  late final List<int> digits;
   try {
-    final digits = csv.split(sep).map(int.parse).toList();
-    return digitsToString(digits);
+    digits = csv.split(sep).map(int.parse).toList();
   } on FormatException {
     return null;
-  }
-}
-
-/// ------------------------------------------------------------------
-/// Fixed-width numeric
-/// "0az" → "000126"
-/// ------------------------------------------------------------------
-String? encodeFixed(String text) =>
-    stringToDigits(text)
-        ?.map((d) => d.toString().padLeft(2, '0'))
-        .join();
-
-String? decodeFixed(String numeric) {
-  if (numeric.length.isOdd || numeric.contains(RegExp(r'\D'))) return null;
-  final digits = <int>[];
-  for (var i = 0; i < numeric.length; i += 2) {
-    digits.add(int.parse(numeric.substring(i, i + 2)));
   }
   return digitsToString(digits);
 }
 
-/// ------------------------------------------------------------------
-/// Fixed-int (base-27 <-> decimal int)
-/// ------------------------------------------------------------------
+/// Fixed-width numeric: each digit → 2 decimal chars (00–26)
+String? encodeFixed(String text) =>
+    stringToDigits(text)?.map((d) => d.toString().padLeft(2, '0')).join();
+
+String? decodeFixed(String numeric) {
+  if (numeric.isEmpty || numeric.length.isOdd) return null;
+  if (numeric.contains(RegExp(r'\D'))) return null;
+  final ds = <int>[];
+  for (var i = 0; i < numeric.length; i += 2) {
+    final n = int.parse(numeric.substring(i, i + 2));
+    if (n < 0 || n >= kRadix) return null;
+    ds.add(n);
+  }
+  return digitsToString(ds);
+}
+
+/// Convenience int wrappers (careful with 64-bit limits)
+int? encodeFixedInt(String text) => int.tryParse(encodeFixed(text) ?? '');
+
 String? decodeFixedInt(int value) {
-  if (value < 0) return null;
-  final digits = <int>[];
-  var n = value;
-  while (n > 0) {
-    digits.insert(0, n % kRadix);
-    n ~/= kRadix;
-  }
-  return digitsToString(digits.isEmpty ? [0] : digits);
+  final s = value.toString();
+  final even = (s.length + 1) & ~1;
+  return decodeFixed(s.padLeft(even, '0'));
 }
 
-int? encodeFixedInt(String text) {
-  final digits = stringToDigits(text);
-  if (digits == null) return null;
-  var value = 0;
-  for (final d in digits) {
-    value = value * kRadix + d;
-  }
-  return value;
-}
-
-/// ------------------------------------------------------------------
-/// Tail-sentinel BigInt
-/// Layout: <payload digits…> <length digit>
-/// ------------------------------------------------------------------
+/// Tail-sentinel BigInt: <payload digits …> <length digit 0–26>
+/// Max length with 1-digit sentinel = 26.
 BigInt? encodeBigIntTail(String text) {
   final payload = stringToDigits(text);
   if (payload == null) return null;
   if (payload.length > 26) {
-    throw ArgumentError('Tail-sentinel supports ≤26 symbols.');
+    throw ArgumentError(
+      'Tail-sentinel BigInt supports ≤26 symbols '
+      '(got ${payload.length})',
+    );
   }
-  // Ensure we shift enough to keep leading zeros
   BigInt n = BigInt.zero;
   for (final d in [...payload, payload.length]) {
     n = n * _k27 + BigInt.from(d);
   }
   return n;
 }
-
 
 String? decodeBigIntTail(BigInt n) {
   if (n == BigInt.zero) return '';
@@ -103,10 +72,25 @@ String? decodeBigIntTail(BigInt n) {
     digits.insert(0, (m % _k27).toInt());
     m ~/= _k27;
   }
+  if (digits.isEmpty) return '';
   final sentinel = digits.removeLast();
-  while (digits.length < sentinel) { // restore leading 0's
+  if (sentinel < digits.length) return null;
+  while (digits.length < sentinel) {
     digits.insert(0, 0);
   }
-  if (sentinel != digits.length) return null;
   return digitsToString(digits);
+}
+
+/// Quick smoke test for all codecs
+void selfTestCodec() {
+  const words = ['0', 'a', '0az', 'xyz', '000', 'livnium'];
+  for (final w in words) {
+    final c = decodeCsv(encodeCsv(w)!);
+    final f = decodeFixed(encodeFixed(w)!);
+    final b = decodeBigIntTail(encodeBigIntTail(w)!);
+    assert(
+      w == c && w == f && w == b,
+      'Codec mismatch "$w": csv=$c fixed=$f big=$b',
+    );
+  }
 }

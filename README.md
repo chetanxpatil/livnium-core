@@ -5,6 +5,13 @@
 © 2025 Chetan Patil — Licensed under
 [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/)
 
+## v1.2 Highlights
+
+- Clean radix‑27 number system with tail‑sentinel BigInt encoding
+- Clarified energy model and face‑only visibility principle
+- Coupler field utilities and interference demos
+- Added 2×2 seed tier and scale ladder bridges
+
 ## Introduction
 
 Imagine a language written not on paper, but in space. Picture a 3×3×3 lattice of symbols floating before you, each piece carrying meaning by where it sits and what faces it shows. At the very center of this lattice resides a silent observer symbol, **Om (0)**, anchoring the system like a calm eye in a storm. This is **Livnium Core** – a novel symbolic language for computational expression, a playground where data and ideas live in a structured cube of 27 units.
