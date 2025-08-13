@@ -2,6 +2,13 @@ library;
 
 import 'alphabet.dart';
 
+// Optional polish (not yet implemented):
+// 1. Balanced final carry — convert any leftover centered carry to a
+//    standard 0..26 digit instead of emitting then verifying via
+//    [add27], eliminating the fallback.
+// 2. Input validity semantics — `_valid` rejects empty strings; consider
+//    allowing "" as zero or clearly documenting the non-empty requirement.
+
 const int _R = 27;
 
 int? _d(String ch) => symbolToValue(ch);
