@@ -28,5 +28,5 @@ void main() {
     buffer.writeln();
   }
 
-  File('dump-example-log.dart').writeAsStringSync(buffer.toString());
+  File('dump-example-log.txt').writeAsStringSync(buffer.toString());
 }
