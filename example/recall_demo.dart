@@ -1,5 +1,4 @@
 import 'package:livnium_core/livnium_core.dart';
-import 'package:livnium_core/src/potts.dart';
 
 void main() {
   final patterns = [

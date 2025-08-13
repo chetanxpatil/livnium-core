@@ -1,5 +1,4 @@
 import 'package:livnium_core/livnium_core.dart';
-import 'package:livnium_core/src/codec.dart';
 
 void main() {
   const words = ['0', 'a', 'a0', 'xyz', '000', 'livnium', '0az'];
@@ -18,8 +17,10 @@ void main() {
     final wBig = decodeBigIntTail(big);
     final wDec = decodeDecimal(dec);
 
-    assert(w == wCsv && w == wFixed && w == wBig && w == wDec,
-    'Codec mismatch "$w": csv=$wCsv fixed=$wFixed big=$wBig dec=$wDec');
+    assert(
+      w == wCsv && w == wFixed && w == wBig && w == wDec,
+      'Codec mismatch "$w": csv=$wCsv fixed=$wFixed big=$wBig dec=$wDec',
+    );
 
     // RAW checks (pure base-27)
     final raw = encodeBigIntRaw(w)!;
@@ -34,7 +35,10 @@ void main() {
     if (w == '000') {
       assert(raw == BigInt.zero, 'Expected raw("000")==0, got $raw');
       final restored = decodeBigIntRaw(raw, length: 3);
-      assert(restored == '000', 'Leading zeros lost: expected "000", got $restored');
+      assert(
+        restored == '000',
+        'Leading zeros lost: expected "000", got $restored',
+      );
     }
 
     print('$w   $csv   $fixed   $big   $dec   $raw');
