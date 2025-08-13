@@ -1,7 +1,18 @@
 library;
 
+import 'dart:math' as math;
+
 import 'grid.dart';
 import 'vec3.dart';
+import 'coupler.dart';
+
+typedef SimilarityKernel = double Function(int k, int l);
+
+double cosKernel(int k, int l) {
+  const twoPiOver27 = 2 * math.pi / 27.0;
+  final d = (k - l);
+  return math.cos(twoPiOver27 * d);
+}
 
 /// Simple Potts-Hopfield network with 27 possible symbols per node.
 class Potts27 {
@@ -25,10 +36,12 @@ class Potts27 {
   final List<int> s;
 
   Potts27(this.n, this.nbrs)
-      : w = List.generate(
-            n, (_) => List.generate(n, (_) => List.filled(q * q, 0.0))),
-        b = List.generate(n, (_) => List.filled(q, 0.0)),
-        s = List.filled(n, 0);
+    : w = List.generate(
+        n,
+        (_) => List.generate(n, (_) => List.filled(q * q, 0.0)),
+      ),
+      b = List.generate(n, (_) => List.filled(q, 0.0)),
+      s = List.filled(n, 0);
 
   /// Factory that builds a 3×3×3 cube (27 nodes) with 6-neighborhoods.
   factory Potts27.cube() {
@@ -46,10 +59,79 @@ class Potts27 {
     return Potts27(n, nbrs);
   }
 
+  void buildFromCouplers({
+    required CouplerParams params,
+    required SimilarityKernel kernel,
+    required double targetNorm,
+    double geoMix = 1.0,
+  }) {
+    for (var i = 0; i < n; i++) {
+      for (final j in nbrs[i]) {
+        final wij = w[i][j];
+        for (var t = 0; t < wij.length; t++) {
+          wij[t] = 0.0;
+        }
+      }
+    }
+
+    final coords = cube3Coords().toList();
+    for (var i = 0; i < n; i++) {
+      for (final j in nbrs[i]) {
+        final gi = couplingAt(coords[i], params);
+        final gj = couplingAt(coords[j], params);
+        final G = geoMix * (gi < gj ? gi : gj);
+
+        final wij = w[i][j];
+        for (var k = 0; k < Potts27.q; k++) {
+          for (var l = 0; l < Potts27.q; l++) {
+            wij[k * Potts27.q + l] = G * kernel(k, l);
+          }
+        }
+      }
+    }
+
+    for (var i = 0; i < n; i++) {
+      for (final j in nbrs[i]) {
+        final wij = w[i][j];
+        final wji = w[j][i];
+        for (var k = 0; k < Potts27.q; k++) {
+          for (var l = 0; l < Potts27.q; l++) {
+            wji[l * Potts27.q + k] = wij[k * Potts27.q + l];
+          }
+        }
+      }
+    }
+
+    for (var i = 0; i < n; i++) {
+      for (final j in nbrs[i]) {
+        final wij = w[i][j];
+        var norm2 = 0.0;
+        for (final v in wij) {
+          norm2 += v * v;
+        }
+        final norm = norm2 > 0 ? math.sqrt(norm2) : 0.0;
+        final s = norm > 0 ? (targetNorm / norm) : 1.0;
+        for (var t = 0; t < wij.length; t++) {
+          wij[t] *= s;
+        }
+      }
+    }
+  }
+
   /// Hebbian storage of [patterns]. Each pattern is a list of length [n]
-  /// with digits 0..26.
-  void store(List<List<int>> patterns, {double scale = 1.0}) {
+  /// with digits 0..26. After building Hebbian weights, they are symmetrized,
+  /// scaled to [targetNorm], then blended with existing weights.
+  void store(
+    List<List<int>> patterns, {
+    double scale = 0.3,
+    double targetNorm = 0.4,
+    double blend = 0.5,
+  }) {
     final invN = scale / n;
+    final wHebb = List.generate(
+      n,
+      (_) => List.generate(n, (_) => List.filled(q * q, 0.0)),
+    );
     for (final p in patterns) {
       if (p.length != n) {
         throw ArgumentError('Pattern length ${p.length} != n=$n');
@@ -58,13 +140,53 @@ class Potts27 {
         for (final j in nbrs[i]) {
           // Subtract baseline 1/q from all entries.
           final base = invN / q;
-          final wij = w[i][j];
+          final wij = wHebb[i][j];
           for (var idx = 0; idx < wij.length; idx++) {
             wij[idx] -= base;
           }
           // Add correlation for observed pair.
           final idx = p[i] * q + p[j];
           wij[idx] += invN;
+        }
+      }
+    }
+
+    // Symmetrize Hebbian weights.
+    for (var i = 0; i < n; i++) {
+      for (final j in nbrs[i]) {
+        final wij = wHebb[i][j];
+        final wji = wHebb[j][i];
+        for (var k = 0; k < q; k++) {
+          for (var l = 0; l < q; l++) {
+            wji[l * q + k] = wij[k * q + l];
+          }
+        }
+      }
+    }
+
+    // Scale each block to targetNorm.
+    for (var i = 0; i < n; i++) {
+      for (final j in nbrs[i]) {
+        final wij = wHebb[i][j];
+        var norm2 = 0.0;
+        for (final v in wij) {
+          norm2 += v * v;
+        }
+        final norm = norm2 > 0 ? math.sqrt(norm2) : 0.0;
+        final s = norm > 0 ? (targetNorm / norm) : 1.0;
+        for (var t = 0; t < wij.length; t++) {
+          wij[t] *= s;
+        }
+      }
+    }
+
+    // Blend with existing weights.
+    for (var i = 0; i < n; i++) {
+      for (final j in nbrs[i]) {
+        final wij = w[i][j];
+        final hebb = wHebb[i][j];
+        for (var t = 0; t < wij.length; t++) {
+          wij[t] = (1 - blend) * wij[t] + blend * hebb[t];
         }
       }
     }
