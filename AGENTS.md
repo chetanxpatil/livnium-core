@@ -1,178 +1,344 @@
-# AGENTS.md — Livnium Core (Codex brief)
+# AGENTS.md — Livnium Docs Plan (for Codex)
 
-**Purpose.**  
-Livnium Core turns the 3×3×3 lattice (coords in {-1,0,1}³) into a small, consistent “spatial OS”:
-- Base-27 alphabet: `0, a..z` → digits `0..26`.
-- Geometry: exposure/faces = 0 (core), 1 (face centers), 2 (edges), 3 (corners).
-- Energy & couplers: lightweight physics‑y rules with a single constant **K = 10.125**.
-- Dynamics: Potts‑Hopfield recall, face moves (Rubik-like), and a hierarchical micro‑cube tree.
+## Goals
 
----
+1. Scaffold a Docusaurus site `livnium-docs`.
+2. Generate `dartdoc` HTML from `livnium-core` and mount at `/api/`.
+3. Add pages + navbar link + DartPad embeds.
+4. Automate builds + deploy to GitHub Pages on tag/main.
 
-## 0) Golden rules
-
-- **Alphabet is base-27**: `'0'→0`, `'a'→1`, …, `'z'→26`.  
-  **Never** treat `'a0'` as a single token — it’s the base‑27 number `[1,0]` (i.e., decimal 27).
-- **Exposure ≡ faces**: 0 (core), 1 (centers), 2 (edges), 3 (corners). Counts are **1, 6, 12, 8**.
-- **Right‑hand rule rotations** around X/Y/Z; face moves use the same convention.
-- **Public API lives in** `lib/livnium_core.dart` exports. Prefer that in examples.
+> Assumes sibling repos:
+>
+> ```
+> livnium/
+> ├─ livnium-core/   # Dart package
+> └─ livnium-docs/   # Docusaurus site
+> ```
 
 ---
 
-## 1) Geometry & invariants
+## 0) Verify toolchain (non-interactive)
 
-- Coordinates: `Vec3(x,y,z)` with `x,y,z ∈ {-1,0,1}` ⇒ 27 positions.
-- Class counts must always hold: **core=1, centers=6, edges=12, corners=8**.
-- Helpers (see `grid.dart`):
-  - `cube3Coords()`, `exposure(v)`, `isCore/Center/Edge/Corner`,
-  - metrics `l1`, `linf`, `l2`,
-  - `facesForVec3(v)` is the same as `exposure(v)`.
-
----
-
-## 2) Alphabet & codecs
-
-- `kRadix = 27`; `kSymbols` lists the glyphs.
-- Convert helpers: `symbolToValue`, `valueToSymbol`, `stringToDigits`, `digitsToString`.
-- Codecs (`codec.dart`):
-  - CSV (human-readable), Fixed‑width (00–26), Tail‑sentinel BigInt (round‑trips **leading zeros**), Raw base‑27 BigInt (compact, **caller must track length**).
-- 64‑bit helpers: `encodeFixedInt`/`decodeFixedInt`, `encodeDecimalInt`/`decodeDecimalInt`.
-- Arithmetic (`arith27.dart`):
-  - `toDecimal`, `fromDecimal` (BigInt), `add27` (canonical), `add27Balanced` (centered digits −13..+13).
-  - TODO kept: finalize “balanced final carry” polish.
-
-**Sanity**: `"a0"` encodes as fixed `"0100"` (decimal `100`) and raw BigInt `27`.
+```bash
+node -v
+npm -v
+dart --version
+```
 
 ---
 
-## 3) Energy model & the constant K
+## 1) Scaffold the docs site
 
-- **Equilibrium constant**:
-  
-  \[
-  K = \frac{27}{8} + \frac{27}{12} + \frac{27}{6}
-    = 27 \left(\frac{1}{8} + \frac{1}{12} + \frac{1}{6}\right)
-    = \frac{81}{8} = 10.125
-  \]
-
-  - Intuition: 27 times the sum of reciprocals of the exposure‑class multiplicities (corners=8, edges=12, centers=6). It’s a compact **harmonic signature** of the 3×3×3 structure and gives nice exact rationals when split by faces.
-  - **Yes**, `10.125` is a base‑10 decimal (exactly `81/8`). Dividing by 2 or 3 stays exact (binary‑friendly fractions):
-    - `K/1 = 10.125`, `K/2 = 5.0625`, `K/3 = 3.375`.
-
-- **Symbol “SE9” scale** (`energy.dart`):
-  - `SE9 = (faces/3) * 27` ⇒ centers=9, edges=18, corners=27, core=0.
-
-- **K‑units**:
-  - `symbolEnergyK(ch) = K * faces(ch)` ⇒ centers=1K, edges=2K, corners=3K, core=0.
-
-- **Per‑face unit energy**:
-  - `perFaceUnitEnergy(faces) = K / faces`.
+```bash
+cd ..                       # from livnium-core to root livnium/
+npx create-docusaurus@latest livnium-docs classic --package-manager npm --skip-install
+cd livnium-docs
+npm i
+```
 
 ---
 
-## 4) Couplers (field strength)
+## 2) Generate API docs & mount under `/api`
 
-- Formula (`coupler.dart`):
-  
-  \[
-  C(v) = \tau_0 \cdot \frac{K}{\text{faces}(v)} \cdot \frac{1}{\big(L_1(v)\big)^{\alpha}}
-  \]
+Create a script that builds dartdoc and syncs it into Docusaurus static assets.
 
-  - `faces(v) ∈ {1,2,3}`, core excluded (returns 0).
-  - `L1(v) ∈ {1,2,3}` for non‑core points.
-  - `alpha` is the path‑loss exponent.
+**File:** `scripts/sync_api.sh`
 
-- Expected magnitudes (τ₀=1, α=1):
-  - L=1 centers: `C = K = 10.125`
-  - L=2 edges:  `C = (K/2) / 2 = 2.53125`
-  - L=3 corners: `C = (K/3) / 3 = 1.125`
+```bash
+#!/usr/bin/env bash
+set -euo pipefail
 
-- Helpers: `rankTopCouplers`, `complexSumMagnitude` (phasor toy).
+ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+CORE="$ROOT/../livnium-core"
+DOCS="$ROOT"
 
----
+# 1) Build dartdoc
+cd "$CORE"
+dart pub get
+dart doc . --output build/api
 
-## 5) Potts‑Hopfield network
+# 2) Sync into docusaurus static dir
+mkdir -p "$DOCS/static/api"
+rsync -a --delete "$CORE/build/api/" "$DOCS/static/api/"
+echo "API synced to livnium-docs/static/api/"
+```
 
-- `Potts27.cube()` builds 27 nodes with 6‑neighborhood (Manhattan‑1) adjacency.
-- Build geometry‑aware weights: `buildFromCouplers(params, kernel, targetNorm, geoMix)`.
-  - Kernel example: `cosKernel(k,l) = cos(2π(k−l)/27)`.
-  - Weights are symmetrized and block‑normalized (L2) to `targetNorm`.
-- Store patterns: `store(patterns, scale, targetNorm, blend)`.
-- Bias: `setBias({nodeIndex: List<double>(q)})`.
-- Dynamics: `stepOnce()` / `relax(maxIters=50)` picks the arg‑max field per node.
+```bash
+chmod +x scripts/sync_api.sh
+```
 
-**Invariant tests** cover symmetry, distance monotonicity, and that geometry helps (or at least does not hurt) recall.
+Add NPM scripts.
 
----
+**Edit:** `package.json` → `"scripts"`
 
-## 6) Moves & rotations
-
-- Faces: `U,D,L,R,F,B`.
-- A `FaceMove(face, quarterTurns)` with `±1,±2,±3`.
-- `permutationFor(move)` returns length‑27 index mapping; `applyPerm` mutates symbols.
-- `applyMoves(seq)` composes permutations in order.
-- Rotations: RH rule helpers `rotateX/rotateY/rotateZ`, and `applyRotations`, `invertRotations`.
-
-**Invariants**: energy sum (SE9) and class counts are preserved under any move sequence.
-
----
-
-## 7) Hierarchical micro‑cube tree
-
-- `CubePath` is a dotted base‑27 path like `"s.y.a"` → `[19,25,1]`.
-- `MicroCube` holds 27 digits and an internal `Potts27` for local smoothing.
-- `LivniumTree`:
-  - `getOrCreate(path)`, `setSymbol(path, pos, digit)`, `getSymbol(path,pos)`.
-  - `evolve(maxDepth, biasStrength, localIters)` does post‑order:
-    1) recurse children,
-    2) `pullFromChildren()` (majority vote into the parent slot),
-    3) `stepLocal()` (Potts relax),
-    4) `pushBiasToChildren(beta)` (parent slot biases child center).
+```json
+{
+  "scripts": {
+    "start": "docusaurus start",
+    "build": "docusaurus build",
+    "serve": "docusaurus serve",
+    "deploy": "docusaurus deploy",
+    "sync:api": "bash scripts/sync_api.sh",
+    "build:site": "npm run sync:api && npm run build"
+  }
+}
+```
 
 ---
 
-## 8) Exposure mapping generator
+## 3) Link API in navbar + add docs pages
 
-- `generateExposureMapping(mode: 'conventional' | 'harmonic')`
-  - Conventional: contiguous ranges (`a..f` centers, `g..r` edges, `s..z` corners).
-  - Harmonic: interleaves classes using class steps derived from `K`.
-- Every symbol maps to `(faces, side)`. The `CORE` is `'0'`.
+**Edit:** `docusaurus.config.js` (only the shown keys)
+
+```js
+// ...
+title: 'Livnium Core',
+tagline: 'Spatial Operating System for Symbolic Computation',
+url: 'https://<YOUR_GH_USERNAME>.github.io',
+baseUrl: '/livnium-docs/', // If deploying to <user>.github.io/livnium-docs
+organizationName: '<YOUR_GH_USERNAME>',
+projectName: 'livnium-docs',
+themes: ['@docusaurus/theme-live-codeblock'],
+themeConfig: {
+  navbar: {
+    title: 'Livnium',
+    items: [
+      { to: '/docs/intro', label: 'Docs', position: 'left' },
+      { to: '/api/index.html', label: 'API', position: 'left' },
+      { href: 'https://github.com/<YOUR_GH_USERNAME>/livnium-core', label: 'GitHub', position: 'right' }
+    ],
+  },
+},
+staticDirectories: ['static'],
+// ...
+```
+
+**Create:** `docs/intro.md`
+
+````md
+# Livnium Core
+
+Livnium Core is a base-27 spatial grammar over a 3×3×3 lattice.
+
+## Quick Start
+```bash
+dart pub add livnium_core
+````
+
+* Explore the **API**: [/api/index.html](/api/index.html)
+* Concepts: spatial alphabet, rotations, energy model.
+
+````
+
+**Create:** `docs/concepts/energy.md`
+```md
+# Symbolic Energy (Primer)
+
+- 8 corners (3 faces), 12 edges (2 faces), 6 face centers (1 face) → 54 faces.
+- We normalize total energy to 10.125 for even per-face distribution (10.125 / 54 = 0.1875 per face).
+- Corner = 3×, Edge = 2×, Face = 1× exposure. (Details: how energy aggregates per glyph/word.)
+````
+
+**Create:** `docs/api.md`
+
+````md
+# API Reference
+
+The full, auto-generated Dart API lives at:
+
+👉 **[/api/index.html](/api/index.html)**
+
+> Regenerate with:
+> ```bash
+> npm run sync:api
+> ```
+````
 
 ---
 
-## 9) Tests & how to run
+## 4) Add DartPad component + example page
 
-- Run all tests:
-  ```bash
-  dart test
-  ```
-- Quick examples (all should assert/print cleanly):
-  ```bash
-  dart run example/encode_demo.dart
-  dart run example/rotate_demo.dart
-  dart run example/coupler_demo.dart
-  dart run example/projection_demo.dart
-  dart run example/arith_carry_demo.dart
-  dart run example/recall_demo.dart
-  dart run example/hierarchy_demo.dart
-  ```
+**Create:** `src/components/DartPad.tsx`
+
+```tsx
+import React from 'react';
+
+export default function DartPad({ gistId, height = 520 }) {
+  const src = `https://dartpad.dev/embed-flutter.html?id=${gistId}`;
+  return (
+    <iframe
+      src={src}
+      style={{ width: '100%', height, border: 0, overflow: 'hidden' }}
+      loading="lazy"
+      allow="clipboard-read; clipboard-write; geolocation"
+      title="DartPad"
+    />
+  );
+}
+```
+
+**Create:** `docs/examples/base27.mdx`
+
+```mdx
+import DartPad from '@site/src/components/DartPad';
+
+# Base-27 Playground
+
+Try a minimal encoder demo:
+
+<DartPad gistId="PUT_YOUR_GIST_ID_HERE" height={560} />
+```
 
 ---
 
-## 10) Known issues / TODOs
+## 5) Run locally
 
-- **Hierarchy demo output in docs is stale.** The code & tests are correct; re‑run and refresh the captured output (the root’s `"s"` slot should match its child’s majority after two evolutions).
-- **Examples duplicating helpers.** Prefer `grid.dart` over local copies to avoid drift.
-- **Arithmetic polish.** Implement the “balanced final carry” cleanup noted in `arith27.dart`.
-- **Doc clarity.** Keep “exposure == faces” explicit whenever used.
+```bash
+npm run sync:api
+npm run start
+```
 
 ---
 
-## 11) PR checklist (Codex)
+## 6) GitHub Pages deployment (CI)
 
-- ✅ Preserve class counts (1,6,12,8) and energy invariants in any new transform.  
-- ✅ Never invent a composite digit; `'a0'` is `[1,0]`.  
-- ✅ Keep K as `81/8` (10.125) and document any place you change normalization.  
-- ✅ Examples import the public API unless they intentionally test internals.  
-- ✅ Add/adjust tests when changing coupler kernels, path‑loss, or tree evolution.
+### 6.1 Prepare repo
 
+* Ensure `livnium-docs` has remote on GitHub.
+* In `docusaurus.config.js`, set `organizationName`, `projectName`, `url`, `baseUrl` correctly.
+* Create a **fine-grained PAT** or use default `GITHUB_TOKEN` in Actions.
+
+### 6.2 Workflow
+
+**File:** `.github/workflows/docs.yml`
+
+```yaml
+name: Build & Deploy Docs
+
+on:
+  push:
+    branches: [ main ]
+    tags: [ 'v*' ]
+
+jobs:
+  docs:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      # Get livnium-core alongside livnium-docs
+      - name: Checkout livnium-core
+        uses: actions/checkout@v4
+        with:
+          repository: <YOUR_GH_USERNAME>/livnium-core
+          path: ../livnium-core
+          fetch-depth: 0
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Setup Dart
+        uses: dart-lang/setup-dart@v1
+        with:
+          sdk: 'stable'
+
+      - name: Install deps
+        run: npm ci
+
+      - name: Build dartdoc and sync
+        run: npm run sync:api
+
+      - name: Build site
+        run: npm run build
+
+      - name: Deploy to GitHub Pages
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./build
+          force_orphan: true
+```
+
+> If deploying to `<user>.github.io` root, set `baseUrl: '/'` and publish to that repo. If deploying to a project page (recommended), keep `baseUrl: '/livnium-docs/'`.
+
+---
+
+## 7) One-shot setup script (optional)
+
+**File:** `scripts/first_run.sh`
+
+```bash
+#!/usr/bin/env bash
+set -euo pipefail
+
+# From livnium/ root:
+[ -d livnium-docs ] || npx create-docusaurus@latest livnium-docs classic --package-manager npm --skip-install
+
+pushd livnium-docs >/dev/null
+npm i
+mkdir -p scripts docs/concepts src/components docs/examples .github/workflows
+
+# Drop prepared files if they don't exist
+[ -f scripts/sync_api.sh ] || cat > scripts/sync_api.sh <<'EOF'
+# (paste content from step 2)
+EOF
+chmod +x scripts/sync_api.sh
+
+# Create starter pages if missing
+[ -f docs/intro.md ] || cat > docs/intro.md <<'EOF'
+# (paste intro.md content)
+EOF
+
+[ -f docs/concepts/energy.md ] || cat > docs/concepts/energy.md <<'EOF'
+# (paste energy.md content)
+EOF
+
+[ -f docs/api.md ] || cat > docs/api.md <<'EOF'
+# (paste api.md content)
+EOF
+
+[ -f src/components/DartPad.tsx ] || cat > src/components/DartPad.tsx <<'EOF'
+/* (paste DartPad.tsx content) */
+EOF
+
+[ -f docs/examples/base27.mdx ] || cat > docs/examples/base27.mdx <<'EOF'
+/* (paste base27.mdx content) */
+EOF
+
+# Print next steps
+echo "Run: npm run sync:api && npm run start"
+popd >/dev/null
+```
+
+---
+
+## 8) Content checklist (for you)
+
+* **Docs outline:** Intro, Getting Started, Concepts (alphabet, rotations, energy, grid), Guides (encoding, rotations API, examples), FAQ, Changelog.
+* **Examples:** Embed 2–3 DartPad demos (alphabet ↔ digits, rotate vec3, energy calc).
+* **API hygiene:** Ensure `dartdoc` sees public comments (///), meaningful examples.
+
+---
+
+## 9) Run commands (happy path)
+
+```bash
+# from livnium-core/
+cd ..
+bash livnium-docs/scripts/first_run.sh
+
+# local preview
+cd livnium-docs
+npm run sync:api
+npm run start
+
+# when ready
+git add .
+git commit -m "docs: scaffold docusaurus + dartdoc integration"
+git push origin main
+```
