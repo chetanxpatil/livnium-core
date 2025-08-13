@@ -1,5 +1,4 @@
-import 'package:livnium_core/src/generate_mapping.dart';
-import 'package:livnium_core/src/vec3.dart';
+import 'package:livnium_core/livnium_core.dart';
 
 void main() {
   final exposure = generateExposureMapping(mode: 'conventional');
@@ -48,8 +47,10 @@ void _printFace(String name, int axis, int sign, Map<String, Vec3> coords) {
       if (axis == 1) target = Vec3(colX, sign, -rowY); // Y face
 
       final match = coords.entries
-          .firstWhere((e) => e.value == target,
-              orElse: () => MapEntry(' ', const Vec3(0, 0, 0)))
+          .firstWhere(
+            (e) => e.value == target,
+            orElse: () => MapEntry(' ', const Vec3(0, 0, 0)),
+          )
           .key;
       row += ' ${match.padRight(1)} ';
     }

@@ -47,7 +47,10 @@ SymbolClass? symbolClassForGlyph(String ch) {
 /// Safety: is this glyph valid in our alphabet AND mapped to a class?
 bool isValidGlyph(String ch) => facesForGlyph(ch) >= 0;
 
-/// Equilibrium constant (harmonic signature of 3×3×3 structure).
+/// Equilibrium constant K — harmonic signature of the 3×3×3 structure.
+/// Derivation:
+///   K = 27 * (1/8 + 1/12 + 1/6) = 27 * (9/24) = 81/8 = 10.125
+/// where 8,12,6 are the multiplicities of corners/edges/centers.
 const double equilibriumConstant = 27 / 8 + 27 / 12 + 27 / 6; // 10.125
 
 /// Per-face “unit energy” per your Concentration Law:

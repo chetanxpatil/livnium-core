@@ -1,4 +1,4 @@
-import 'package:livnium_core/src/projection.dart';
+import 'package:livnium_core/livnium_core.dart';
 
 void main() {
   print('=== Drop Axis X ===');

@@ -1,4 +1,4 @@
-import 'package:livnium_core/src/energy.dart';
+import 'package:livnium_core/livnium_core.dart';
 
 void main() {
   final glyphs = ['0', 'a', 'f', 'g', 'r', 's', 'z'];

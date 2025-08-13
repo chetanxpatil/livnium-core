@@ -18,7 +18,11 @@ export 'src/codec.dart'
         encodeFixedInt,
         decodeFixedInt,
         encodeBigIntTail,
-        decodeBigIntTail;
+        decodeBigIntTail,
+        encodeDecimal,
+        decodeDecimal,
+        encodeBigIntRaw,
+        decodeBigIntRaw;
 
 export 'src/rotation.dart'
     show
@@ -43,7 +47,16 @@ export 'src/energy.dart'
         perFaceUnitEnergy;
 
 export 'src/grid.dart'
-    show cube3Coords, isCore, isCenter, isEdge, isCorner, facesForVec3;
+    show
+        cube3Coords,
+        isCore,
+        isCenter,
+        isEdge,
+        isCorner,
+        facesForVec3,
+        l1,
+        linf,
+        l2;
 
 export 'src/coupler.dart'
     show CouplerParams, couplingAt, rankTopCouplers, complexSumMagnitude;
@@ -51,5 +64,8 @@ export 'src/coupler.dart'
 export 'src/moves.dart'
     show Face, FaceMove, permutationFor, applyPerm, applyMoves;
 
-export 'src/potts.dart' show Potts27;
+export 'src/potts.dart' show Potts27, cosKernel;
 export 'src/tree.dart' show CubePath, MicroCube, LivniumTree;
+// New public exports for examples
+export 'src/generate_mapping.dart' show generateExposureMapping;
+export 'src/projection.dart' show dropAxis, radialBins, coarseGrain;

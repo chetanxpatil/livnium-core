@@ -22,7 +22,19 @@ void main() {
   tree.evolve(maxDepth: 2, biasStrength: 0.2, localIters: 10);
   tree.evolve(maxDepth: 2, biasStrength: 0.2, localIters: 10);
 
-  final rootS = tree.getSymbol(root, slotS);
-  print('Root slot "s" now = ${valueToSymbol(rootS)}');
+  // Compute child's majority and assert root reflects it.
+  final child = tree.getOrCreate(childPath);
+  final counts = List<int>.filled(27, 0);
+  for (final d in child.symbols) counts[d]++;
+  var arg = 0, best = -1;
+  for (var k = 0; k < 27; k++) {
+    if (counts[k] > best) {
+      best = counts[k];
+      arg = k;
+    }
+  }
+  final after = valueToSymbol(tree.getSymbol(root, slotS));
+  final maj = valueToSymbol(arg);
+  print('Root slot "s": majority(child)="$maj", after="$after"');
+  assert(after == maj);
 }
-
