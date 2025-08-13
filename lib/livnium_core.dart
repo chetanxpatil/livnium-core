@@ -48,5 +48,8 @@ export 'src/grid.dart'
 export 'src/coupler.dart'
     show CouplerParams, couplingAt, rankTopCouplers, complexSumMagnitude;
 
+export 'src/moves.dart'
+    show Face, FaceMove, permutationFor, applyPerm, applyMoves;
+
 export 'src/potts.dart' show Potts27;
 export 'src/tree.dart' show CubePath, MicroCube, LivniumTree;
