@@ -50,3 +50,5 @@ export 'src/coupler.dart'
 export 'src/projection.dart' show dropAxis, radialBins, coarseGrain;
 
 export 'src/validate.dart' show runAllSelfChecks;
+
+export 'src/potts.dart' show Potts27;
