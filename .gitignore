@@ -8,3 +8,5 @@ build/
 # VS Code / IntelliJ caches
 .idea/
 .vscode/
+dump.txt
+dump-example-log.dart
