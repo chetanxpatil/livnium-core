@@ -11,7 +11,7 @@ Flat correct: 27 / 27
 //// END EXAMPLE: example/recall_demo.dart
 
 //// BEGIN EXAMPLE: example/hierarchy_demo.dart
-Root slot "s" now = 0
+Root slot "s": majority(child)="0", after="0"
 //// END EXAMPLE: example/hierarchy_demo.dart
 
 //// BEGIN EXAMPLE: example/tunnel_demo.dart
@@ -118,26 +118,6 @@ key=(1, 0)  count=3
 key=(-1, 1)  count=3
 key=(0, 1)  count=3
 key=(1, 1)  count=3
-
-Heatmap after dropping Z  (per cell, 3 stacked points)
-Legend: C=Corner, E=Edge, F=Face, O=Core   Example: "C2E1" = 2 corners + 1 edge
- C2E1  E2F1  C2E1
- E2F1  F2O1  E2F1
- C2E1  E2F1  C2E1
-
-Heatmap after dropping X  (per cell, 3 stacked points)
-Legend: C=Corner, E=Edge, F=Face, O=Core   Example: "C2E1" = 2 corners + 1 edge
- C2E1  E2F1  C2E1
- E2F1  F2O1  E2F1
- C2E1  E2F1  C2E1
-
-Heatmap after dropping Y  (per cell, 3 stacked points)
-Legend: C=Corner, E=Edge, F=Face, O=Core   Example: "C2E1" = 2 corners + 1 edge
- C2E1  E2F1  C2E1
- E2F1  F2O1  E2F1
- C2E1  E2F1  C2E1
-
-All checks passed ✔️
 //// END EXAMPLE: example/projection_demo.dart
 
 //// BEGIN EXAMPLE: example/grouping_test.dart
