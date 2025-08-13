@@ -59,24 +59,24 @@ double perFaceUnitEnergy(int faces) {
   return equilibriumConstant / faces;
 }
 
-/// Symbol Energy (SE) by class:
-///   SE = (faces / 3) * 27
+/// Symbol Energy on the 9/18/27 scale.
+///   SE9 = (faces / 3) * 27
 /// So:
 ///   center (1 face) →  9
 ///   edge   (2 face) → 18
 ///   corner (3 face) → 27
 /// core (0 face) gets 0 by definition here.
-double? symbolEnergy(String ch) {
+double? symbolEnergy9(String ch) {
   final f = facesForGlyph(ch);
   if (f < 0) return null; // invalid glyph
   return (f / 3.0) * 27.0;
 }
 
 /// Sum energy across a word; returns 0 if any glyph is invalid.
-double? wordEnergy(String word) {
+double? wordEnergy9(String word) {
   double total = 0;
   for (final ch in word.split('')) {
-    final e = symbolEnergy(ch);
+    final e = symbolEnergy9(ch);
     if (e == null) return null;
     total += e;
   }
@@ -84,7 +84,7 @@ double? wordEnergy(String word) {
 }
 
 /// Optional: quick invariants + examples. Call in a demo/test target.
-void selfTestSymbolEnergy() {
+void selfTestSymbolEnergy9() {
   // Class boundaries
   assert(facesForGlyph('0') == 0);
   for (final ch in ['a', 'b', 'c', 'd', 'e', 'f']) {
@@ -102,7 +102,7 @@ void selfTestSymbolEnergy() {
     'o',
     'p',
     'q',
-    'r'
+    'r',
   ]) {
     assert(facesForGlyph(ch) == 2);
   }
@@ -111,11 +111,11 @@ void selfTestSymbolEnergy() {
   }
 
   // Energies match the stated rule.
-  assert(symbolEnergy('a') == 9.0);
-  assert(symbolEnergy('g') == 18.0);
-  assert(symbolEnergy('s') == 27.0);
-  assert(symbolEnergy('0') == 0.0);
-  assert(symbolEnergy('?') == null);
+  assert(symbolEnergy9('a') == 9.0);
+  assert(symbolEnergy9('g') == 18.0);
+  assert(symbolEnergy9('s') == 27.0);
+  assert(symbolEnergy9('0') == 0.0);
+  assert(symbolEnergy9('?') == null);
 
   // Per-face unit energy sanity
   assert(perFaceUnitEnergy(1) == 10.125);
@@ -123,8 +123,8 @@ void selfTestSymbolEnergy() {
   assert(perFaceUnitEnergy(3) == 3.375);
 
   // Word energy examples
-  assert(wordEnergy('a') == 9.0);
-  assert(wordEnergy('ag') == 27.0); // 9 + 18
-  assert(wordEnergy('as') == 36.0); // 9 + 27
-  assert(wordEnergy('a?') == null);
+  assert(wordEnergy9('a') == 9.0);
+  assert(wordEnergy9('ag') == 27.0); // 9 + 18
+  assert(wordEnergy9('as') == 36.0); // 9 + 27
+  assert(wordEnergy9('a?') == null);
 }

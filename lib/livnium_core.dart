@@ -36,8 +36,8 @@ export 'src/energy.dart'
     show
         SymbolClass,
         facesForGlyph,
-        symbolEnergy,
-        wordEnergy,
+        symbolEnergy9,
+        wordEnergy9,
         equilibriumConstant,
         perFaceUnitEnergy;
 
