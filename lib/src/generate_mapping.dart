@@ -70,11 +70,11 @@ Map<String, (int faces, String side)> _generateConventional() {
 
 /// ----------------------- Harmonic (interleaved) --------------------------
 int _tiePriorityForFaces(int faces) => switch (faces) {
-      1 => 0,
-      2 => 1,
-      3 => 2,
-      _ => 99,
-    };
+  1 => 0,
+  2 => 1,
+  3 => 2,
+  _ => 99,
+};
 
 Map<String, (int faces, String side)> _generateHarmonic() {
   final stepCorner = equilibriumConstant / _cornerCount;
@@ -83,17 +83,23 @@ Map<String, (int faces, String side)> _generateHarmonic() {
 
   final queue = <_Entry>[
     _Entry(
-        step: stepCorner,
-        faces: 3,
-        remaining: _cornerCount,
-        sideList: _cornerSides),
+      step: stepCorner,
+      faces: 3,
+      remaining: _cornerCount,
+      sideList: _cornerSides,
+    ),
     _Entry(
-        step: stepEdge, faces: 2, remaining: _edgeCount, sideList: _edgeSides),
+      step: stepEdge,
+      faces: 2,
+      remaining: _edgeCount,
+      sideList: _edgeSides,
+    ),
     _Entry(
-        step: stepCenter,
-        faces: 1,
-        remaining: _centerCount,
-        sideList: _centerSides),
+      step: stepCenter,
+      faces: 1,
+      remaining: _centerCount,
+      sideList: _centerSides,
+    ),
   ];
 
   final mapping = <String, (int faces, String side)>{};
@@ -134,7 +140,7 @@ class _Entry {
 }
 
 /// Basic invariants for the conventional mapping.
-void selfTestConventionalMapping(Map<String, (int faces, String side)> m) {
+void _selfTestConventionalMapping(Map<String, (int faces, String side)> m) {
   int c1 = 0, c2 = 0, c3 = 0;
   for (final e in m.entries) {
     final s = e.key;
@@ -171,7 +177,7 @@ void selfTestConventionalMapping(Map<String, (int faces, String side)> m) {
     'o',
     'p',
     'q',
-    'r'
+    'r',
   ]) {
     assert(m[s]!.$1 == 2);
   }

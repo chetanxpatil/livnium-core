@@ -358,13 +358,15 @@ String? decodeBigIntRaw(BigInt n, {required int length}) {
 }
 
 /// Quick self-test (optional)
-void selfTestCodec() {
+void _selfTestCodec() {
   const samples = ['', '0', 'a', '0az', 'xyz', '000', 'livnium'];
   for (final w in samples) {
     final c = decodeCsv(encodeCsv(w)!);
     final f = decodeFixed(encodeFixed(w)!);
     final bt = decodeBigIntTail(encodeBigIntTail(w)!);
-    assert(w == c && w == f && w == bt,
-        'Codec mismatch on "$w": csv=$c fixed=$f bigTail=$bt');
+    assert(
+      w == c && w == f && w == bt,
+      'Codec mismatch on "$w": csv=$c fixed=$f bigTail=$bt',
+    );
   }
 }

@@ -1,4 +1,4 @@
-import 'package:livnium_core/livnium_core.dart';
+import 'package:livnium_core/src/projection.dart';
 
 void main() {
   print('=== Drop Axis X ===');
@@ -26,8 +26,9 @@ void main() {
   }
 
   print('\n=== Coarse Grain: Faces count ===');
-  final coarse = coarseGrain((v) =>
-  ((v.x != 0) ? 1 : 0) + ((v.y != 0) ? 1 : 0) + ((v.z != 0) ? 1 : 0));
+  final coarse = coarseGrain(
+    (v) => ((v.x != 0) ? 1 : 0) + ((v.y != 0) ? 1 : 0) + ((v.z != 0) ? 1 : 0),
+  );
   for (final entry in coarse.entries) {
     print('Faces=${entry.key}: ${entry.value}');
   }

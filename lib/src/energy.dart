@@ -83,8 +83,30 @@ double? wordEnergy9(String word) {
   return total;
 }
 
+/// Symbol energy measured in units of the equilibrium constant K.
+///   core (0 faces)   → 0
+///   center (1 face)  → 1K
+///   edge   (2 faces) → 2K
+///   corner (3 faces) → 3K
+double? symbolEnergyK(String ch) {
+  final f = facesForGlyph(ch);
+  if (f <= 0) return (f == 0) ? 0.0 : null; // core=0, invalid=null
+  return equilibriumConstant * f;
+}
+
+/// Sum energy in K-units across a word; returns null if any glyph is invalid.
+double? wordEnergyK(String word) {
+  double total = 0;
+  for (final ch in word.split('')) {
+    final e = symbolEnergyK(ch);
+    if (e == null) return null;
+    total += e;
+  }
+  return total;
+}
+
 /// Optional: quick invariants + examples. Call in a demo/test target.
-void selfTestSymbolEnergy9() {
+void _selfTestSymbolEnergy9() {
   // Class boundaries
   assert(facesForGlyph('0') == 0);
   for (final ch in ['a', 'b', 'c', 'd', 'e', 'f']) {
@@ -127,4 +149,15 @@ void selfTestSymbolEnergy9() {
   assert(wordEnergy9('ag') == 27.0); // 9 + 18
   assert(wordEnergy9('as') == 36.0); // 9 + 27
   assert(wordEnergy9('a?') == null);
+
+  // K-scale energy checks
+  assert(symbolEnergyK('a') == equilibriumConstant);
+  assert(symbolEnergyK('g') == equilibriumConstant * 2);
+  assert(symbolEnergyK('s') == equilibriumConstant * 3);
+  assert(symbolEnergyK('0') == 0.0);
+  assert(symbolEnergyK('?') == null);
+  assert(wordEnergyK('a') == equilibriumConstant);
+  assert(wordEnergyK('ag') == equilibriumConstant * 3);
+  assert(wordEnergyK('as') == equilibriumConstant * 4);
+  assert(wordEnergyK('a?') == null);
 }
