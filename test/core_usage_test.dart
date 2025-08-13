@@ -16,7 +16,7 @@ void main() {
     });
 
     test('computes word energy', () {
-      expect(wordEnergy(word), equals(63.0));
+      expect(wordEnergy9(word), equals(63.0));
     });
 
     test('rotates a vector around the Z axis', () {
