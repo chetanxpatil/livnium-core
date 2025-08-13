@@ -34,11 +34,12 @@ int facesForVec3(Vec3 v) {
 
 /// Optional geometry helpers you’ll likely use elsewhere.
 int l1(Vec3 v) => v.x.abs() + v.y.abs() + v.z.abs(); // Manhattan
-int linf(Vec3 v) => [v.x.abs(), v.y.abs(), v.z.abs()]
-    .reduce((a, b) => a > b ? a : b); // Chebyshev
-double l2(Vec3 v) => math.sqrt(
-      (v.x * v.x + v.y * v.y + v.z * v.z).toDouble(),
-    );
+int linf(Vec3 v) => [
+  v.x.abs(),
+  v.y.abs(),
+  v.z.abs(),
+].reduce((a, b) => a > b ? a : b); // Chebyshev
+double l2(Vec3 v) => math.sqrt((v.x * v.x + v.y * v.y + v.z * v.z).toDouble());
 
 /// Convenience: filtered lists (non-alloc heavy if you reuse results).
 List<Vec3> corePoints() => cube3Coords().where(isCore).toList();
@@ -47,7 +48,7 @@ List<Vec3> edges() => cube3Coords().where(isEdge).toList();
 List<Vec3> corners() => cube3Coords().where(isCorner).toList();
 
 /// Quick invariants. Call from a demo/test to guard regressions.
-void selfTestGrid() {
+void _selfTestGrid() {
   final pts = cube3Coords().toList();
   print('Total points: ${pts.length}');
   assert(pts.length == 27);

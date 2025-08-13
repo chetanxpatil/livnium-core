@@ -18,10 +18,8 @@ export 'src/codec.dart'
         encodeFixedInt,
         decodeFixedInt,
         encodeBigIntTail,
-        decodeBigIntTail,
-        selfTestCodec;
+        decodeBigIntTail;
 
-export 'src/vec3.dart' show Vec3;
 export 'src/rotation.dart'
     show
         RotationAxis,
@@ -30,7 +28,8 @@ export 'src/rotation.dart'
         rotateY,
         rotateZ,
         applyRotations,
-        invertRotations;
+        invertRotations,
+        Vec3;
 
 export 'src/energy.dart'
     show
@@ -38,6 +37,8 @@ export 'src/energy.dart'
         facesForGlyph,
         symbolEnergy9,
         wordEnergy9,
+        symbolEnergyK,
+        wordEnergyK,
         equilibriumConstant,
         perFaceUnitEnergy;
 
@@ -46,9 +47,5 @@ export 'src/grid.dart'
 
 export 'src/coupler.dart'
     show CouplerParams, couplingAt, rankTopCouplers, complexSumMagnitude;
-
-export 'src/projection.dart' show dropAxis, radialBins, coarseGrain;
-
-export 'src/validate.dart' show runAllSelfChecks;
 
 export 'src/potts.dart' show Potts27;

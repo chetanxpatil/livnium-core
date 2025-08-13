@@ -6,7 +6,7 @@ import 'grid.dart';
 import 'rotation.dart';
 import 'energy.dart';
 
-bool runAllSelfChecks() {
+bool _runAllSelfChecks() {
   // alphabet round-trip
   const samples = ['', '0', 'abc', 'z', '0az', 'livnium'];
   for (final w in samples) {
@@ -61,7 +61,8 @@ bool runAllSelfChecks() {
       cent++;
     else if (isEdge(v))
       edge++;
-    else if (isCorner(v)) corn++;
+    else if (isCorner(v))
+      corn++;
   }
   if (!(core == 1 && cent == 6 && edge == 12 && corn == 8)) return false;
 

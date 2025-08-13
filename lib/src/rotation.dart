@@ -1,6 +1,7 @@
 library;
 
 import 'vec3.dart';
+export 'vec3.dart' show Vec3;
 
 /// Right-hand-rule quarter turns. +90° around an axis follows the RH convention.
 enum RotationAxis { x, y, z }
