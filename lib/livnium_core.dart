@@ -49,3 +49,4 @@ export 'src/coupler.dart'
     show CouplerParams, couplingAt, rankTopCouplers, complexSumMagnitude;
 
 export 'src/potts.dart' show Potts27;
+export 'src/tree.dart' show CubePath, MicroCube, LivniumTree;
