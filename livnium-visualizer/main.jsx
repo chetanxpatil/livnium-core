@@ -1,7 +1,17 @@
-import React, { useMemo, useState, useEffect, useRef } from "react";
-import { Canvas, useThree, useFrame } from "@react-three/fiber";
-import * as THREE from "three";
-import { OrbitControls as ThreeOrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
+import React, {
+  useMemo,
+  useState,
+  useEffect,
+  useRef,
+} from "https://esm.sh/react@18";
+import { createRoot } from "https://esm.sh/react-dom@18/client";
+import {
+  Canvas,
+  useThree,
+  useFrame,
+} from "https://esm.sh/@react-three/fiber@9?deps=three@0.179.1,react@18,react-dom@18";
+import * as THREE from "https://esm.sh/three@0.179.1";
+import { OrbitControls as ThreeOrbitControls } from "https://esm.sh/three@0.179.1/examples/jsm/controls/OrbitControls.js";
 
 /**
  * Livnium 3D Visualizer — React + Three.js
@@ -194,6 +204,7 @@ function Cubelet({ pos, mode, alpha, tau0, hidden }) {
     </group>
   );
 }
+
 
 function Scene({ cubes, mode, alpha, tau0, drop, slice }) {
   // drop: 'none' | 'x' | 'y' | 'z'; slice: -1|0|1 (only used when drop != none)
@@ -442,3 +453,7 @@ export default function Livnium3D() {
     </div>
   );
 }
+
+// Mount React application
+const root = createRoot(document.getElementById("root"));
+root.render(<Livnium3D />);
