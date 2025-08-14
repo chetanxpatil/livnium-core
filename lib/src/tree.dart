@@ -44,6 +44,8 @@ class CubePath {
 }
 
 /// Represents a 3×3×3 cube with optional children per position.
+///
+/// A [MicroCube] may host at most 27 children—one for each slot 0–26.
 class MicroCube {
   /// Exactly 27 symbols for this cube.
   final List<int> symbols;
@@ -57,15 +59,28 @@ class MicroCube {
   /// Energy budget (currently unused numeric placeholder).
   double energyBudget;
 
-  MicroCube({this.energyBudget = 10.125})
-      : symbols = List<int>.filled(27, 0);
+  MicroCube({this.energyBudget = 10.125}) : symbols = List<int>.filled(27, 0);
 
   /// Whether a child exists at [pos].
   bool hasChild(int pos) => children.containsKey(pos);
 
   /// Ensure a child exists at [pos], returning it.
+  ///
+  /// Only positions 0–26 are valid. Attempting to create more than 27 unique
+  /// children or using an out-of-range [pos] throws a [RangeError]. Repeated
+  /// calls for the same [pos] return the existing child.
   MicroCube ensureChild(int pos) {
-    return children.putIfAbsent(pos, () => MicroCube(energyBudget: energyBudget));
+    if (pos < 0 || pos >= 27) {
+      throw RangeError.range(pos, 0, 26, 'pos', 'Child index must be 0..26');
+    }
+    final existing = children[pos];
+    if (existing != null) return existing;
+    if (children.length >= 27) {
+      throw RangeError('MicroCube already has 27 children');
+    }
+    final child = MicroCube(energyBudget: energyBudget);
+    children[pos] = child;
+    return child;
   }
 
   /// Local evolution step for this cube only.
@@ -144,7 +159,8 @@ class LivniumTree {
   }
 
   /// One hierarchical evolution pass (post-order).
-  void evolve({int maxDepth = 2, double biasStrength = 0.2, int localIters = 10}) {
+  void evolve(
+      {int maxDepth = 2, double biasStrength = 0.2, int localIters = 10}) {
     void visit(MicroCube node, int depth) {
       if (depth >= maxDepth) return;
       for (final child in node.children.values) {
@@ -158,4 +174,3 @@ class LivniumTree {
     visit(root, 0);
   }
 }
-

@@ -80,6 +80,26 @@ void main() {
         expect(add27Balanced(x, y), equals(add27(x, y)));
       }
     });
+
+    test('empty string treated as zero', () {
+      expect(toDecimal(''), BigInt.zero);
+      expect(add27('', ''), '0');
+      expect(add27Balanced('', 'a'), 'a');
+      expect(add27Cyclic('z', 'a'), '0');
+    });
+
+    test('modular addition without carry', () {
+      expect(add27Cyclic('z', 'z'), 'y');
+      expect(add27Cyclic('a0', 'a0'), 'b0');
+      expect(add27Cyclic('z', 'a'), '0');
+    });
+
+    test('carry-save addition roundtrip', () {
+      final r = add27CarrySave3('z', 'z', 'z')!;
+      expect(r.sum, 'x');
+      expect(r.carry, 'b');
+      expect(csFinish(r.sum, r.carry), add27(add27('z', 'z')!, 'z'));
+    });
   });
 
   group('property: 1000 random pairs', () {
@@ -88,17 +108,26 @@ void main() {
       for (var t = 0; t < 1000; t++) {
         final a = randWord(rng, rng.nextInt(40) + 1);
         final b = randWord(rng, rng.nextInt(40) + 1);
+        final c = randWord(rng, rng.nextInt(40) + 1);
 
         final decA = toDecimal(a)!;
         final decB = toDecimal(b)!;
-        final sumDec = decA + decB;
+        final decC = toDecimal(c)!;
+        final sumDec = decA + decB + decC;
         final sumWord = fromDecimal(sumDec)!;
 
-        final s1 = add27(a, b)!;
-        final s2 = add27Balanced(a, b)!;
+        final abCanon = add27(a, b)!;
+        final abBal = add27Balanced(a, b)!;
+        expect(abBal, equals(abCanon));
+
+        final s1 = add27(abCanon, c)!;
+        final r = add27CarrySave3(a, b, c)!;
+        final s2 = csFinish(r.sum, r.carry)!;
+        final s3 = add27Balanced(abCanon, c)!;
 
         expect(s1, equals(sumWord));
         expect(s2, equals(sumWord));
+        expect(s3, equals(sumWord));
       }
     });
 

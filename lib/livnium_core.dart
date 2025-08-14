@@ -66,6 +66,7 @@ export 'src/moves.dart'
 
 export 'src/potts.dart' show Potts27, cosKernel;
 export 'src/tree.dart' show CubePath, MicroCube, LivniumTree;
+export 'src/corebit.dart' show CoreBit;
 // New public exports for examples
 export 'src/generate_mapping.dart' show generateExposureMapping;
 export 'src/projection.dart' show dropAxis, radialBins, coarseGrain;

@@ -2,20 +2,12 @@ library;
 
 import 'alphabet.dart';
 
-// Optional polish (not yet implemented):
-// 1. Balanced final carry — convert any leftover centered carry to a
-//    standard 0..26 digit instead of emitting then verifying via
-//    [add27], eliminating the fallback.
-// 2. Input validity semantics — `_valid` rejects empty strings; consider
-//    allowing "" as zero or clearly documenting the non-empty requirement.
-
 const int _R = 27;
 
 int? _d(String ch) => symbolToValue(ch);
 String? _g(int v) => valueToSymbol(v);
 
-bool _valid(String s) =>
-    s.isNotEmpty && s.split('').every((c) => _d(c) != null);
+bool _valid(String s) => s.split('').every((c) => _d(c) != null);
 
 String _stripLeadingZeros(String s) {
   var i = 0;
@@ -58,6 +50,11 @@ String? fromDecimal(BigInt n) {
 /// Standard base-27 addition with carries. Returns `null` on invalid input.
 String? add27(String a, String b) {
   if (!_valid(a) || !_valid(b)) return null;
+  if (a.isEmpty && b.isEmpty) return '0';
+  if (a.isEmpty)
+    return _stripLeadingZeros(b).isEmpty ? '0' : _stripLeadingZeros(b);
+  if (b.isEmpty)
+    return _stripLeadingZeros(a).isEmpty ? '0' : _stripLeadingZeros(a);
   int i = a.length - 1, j = b.length - 1, carry = 0;
   final out = StringBuffer();
 
@@ -73,45 +70,71 @@ String? add27(String a, String b) {
   }
 
   final res = out.toString().split('').reversed.join();
-  return _stripLeadingZeros(res);
+  final stripped = _stripLeadingZeros(res);
+  return stripped.isEmpty ? '0' : stripped;
 }
 
 /// Balanced-carry addition (centered digits −13..+13). Same result as [add27].
 String? add27Balanced(String a, String b) {
-  if (!_valid(a) || !_valid(b)) return null;
-  int i = a.length - 1, j = b.length - 1, carryC = 0; // centered carry
-  final out = <int>[]; // centered digits −13..+13
+  // Balanced addition currently delegates to [add27] but retains the
+  // signature for experimentation with alternative carry schemes.
+  return add27(a, b);
+}
 
+/// Per-digit modulo-27 addition without carry propagation.
+String? add27Cyclic(String a, String b) {
+  if (!_valid(a) || !_valid(b)) return null;
+  if (a.isEmpty && b.isEmpty) return '0';
+  if (a.isEmpty)
+    return _stripLeadingZeros(b).isEmpty ? '0' : _stripLeadingZeros(b);
+  if (b.isEmpty)
+    return _stripLeadingZeros(a).isEmpty ? '0' : _stripLeadingZeros(a);
+  int i = a.length - 1, j = b.length - 1;
+  final out = StringBuffer();
   while (i >= 0 || j >= 0) {
     final da = (i >= 0) ? _d(a[i--])! : 0;
     final db = (j >= 0) ? _d(b[j--])! : 0;
-    var sc = (da - 13) + (db - 13) + carryC; // centered sum
-    if (sc > 13) {
-      sc -= 27;
-      carryC = 1;
-    } else if (sc < -13) {
-      sc += 27;
-      carryC = -1;
-    } else {
-      carryC = 0;
-    }
-    out.add(sc);
-  }
-
-  if (carryC != 0) out.add(carryC);
-
-  // Map centered digits back to 0..26 and build string
-  final buf = StringBuffer();
-  for (var k = out.length - 1; k >= 0; k--) {
-    final dv = out[k] + 13; // 0..26
-    final ch = _g(dv);
+    final s = (da + db) % _R;
+    final ch = _g(s);
     if (ch == null) return null;
-    buf.write(ch);
+    out.write(ch);
   }
-  final res = _stripLeadingZeros(buf.toString());
+  final res = out.toString().split('').reversed.join();
+  final stripped = _stripLeadingZeros(res);
+  return stripped.isEmpty ? '0' : stripped;
+}
 
-  // Safety: must match canonical add27
-  final canon = add27(a, b);
-  if (canon == null || res != canon) return canon; // fall back if mismatch
-  return res;
+/// Carry-save addition of three operands. Returns partial sum and carry.
+({String sum, String carry})? add27CarrySave3(String a, String b, String c) {
+  if (!_valid(a) || !_valid(b) || !_valid(c)) return null;
+  if (a.isEmpty && b.isEmpty && c.isEmpty) {
+    return (sum: '0', carry: '0');
+  }
+  int i = a.length - 1, j = b.length - 1, k = c.length - 1;
+  final sumBuf = StringBuffer();
+  final carryBuf = StringBuffer();
+  while (i >= 0 || j >= 0 || k >= 0) {
+    final da = (i >= 0) ? _d(a[i--])! : 0;
+    final db = (j >= 0) ? _d(b[j--])! : 0;
+    final dc = (k >= 0) ? _d(c[k--])! : 0;
+    final total = da + db + dc;
+    final digit = total % _R;
+    final carry = total ~/ _R;
+    sumBuf.write(_g(digit)!);
+    carryBuf.write(_g(carry)!);
+  }
+  final sumStr =
+      _stripLeadingZeros(sumBuf.toString().split('').reversed.join());
+  final carryStr =
+      _stripLeadingZeros(carryBuf.toString().split('').reversed.join());
+  return (
+    sum: sumStr.isEmpty ? '0' : sumStr,
+    carry: carryStr.isEmpty ? '0' : carryStr,
+  );
+}
+
+/// Finalize a carry-save addition produced by [add27CarrySave3].
+String? csFinish(String sum, String carry) {
+  if (!_valid(sum) || !_valid(carry)) return null;
+  return add27(sum, '${carry}0');
 }

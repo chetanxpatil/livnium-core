@@ -24,6 +24,21 @@ void main() {
       expect(parent.symbols[3], 4);
     });
 
+    test('enforces max 27 children and validates indices', () {
+      final cube = MicroCube();
+      for (var i = 0; i < 27; i++) {
+        cube.ensureChild(i);
+      }
+      expect(cube.children.length, 27);
+      expect(() => cube.ensureChild(27), throwsRangeError);
+      expect(() => cube.ensureChild(-1), throwsRangeError);
+      // Reusing existing child does not increase count
+      final c1 = cube.ensureChild(5);
+      final c2 = cube.ensureChild(5);
+      expect(identical(c1, c2), isTrue);
+      expect(cube.children.length, 27);
+    });
+
     test('bias flows from parent to child center', () {
       final parent = MicroCube();
       final child = parent.ensureChild(5);
@@ -70,4 +85,3 @@ void main() {
     });
   });
 }
-
