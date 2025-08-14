@@ -1,6 +1,7 @@
 import 'dart:math';
 import 'package:test/test.dart';
 import 'package:livnium_core/src/arith27.dart';
+import 'package:livnium_core/src/alphabet.dart';
 
 String randWord(Random rng, int len) {
   // digits 0..26 → symbols
@@ -86,6 +87,10 @@ void main() {
       expect(add27('', ''), '0');
       expect(add27Balanced('', 'a'), 'a');
       expect(add27Cyclic('z', 'a'), '0');
+      final cs = add27CarrySave3('', '', '')!;
+      expect(cs.sum, '0');
+      expect(cs.carry, '0');
+      expect(csFinish('', ''), '0');
     });
 
     test('modular addition without carry', () {
@@ -128,6 +133,24 @@ void main() {
         expect(s1, equals(sumWord));
         expect(s2, equals(sumWord));
         expect(s3, equals(sumWord));
+      }
+    });
+
+    test('cyclic addition matches digitwise modular sum', () {
+      final rng = Random(2024);
+      for (var t = 0; t < 1000; t++) {
+        final a = randWord(rng, rng.nextInt(40) + 1);
+        final b = randWord(rng, rng.nextInt(40) + 1);
+        final cyc = add27Cyclic(a, b)!;
+        final n = max(a.length, b.length);
+        for (var i = 0; i < n; i++) {
+          final da = i < a.length ? symbolToValue(a[a.length - 1 - i])! : 0;
+          final db = i < b.length ? symbolToValue(b[b.length - 1 - i])! : 0;
+          final expected = (da + db) % 27;
+          final rc =
+              i < cyc.length ? symbolToValue(cyc[cyc.length - 1 - i])! : 0;
+          expect(rc, expected);
+        }
       }
     });
 
