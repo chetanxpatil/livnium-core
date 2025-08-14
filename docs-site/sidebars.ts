@@ -19,6 +19,7 @@ const sidebars: SidebarsConfig = {
       label: 'API Reference',
       items: [
         'api/alphabet',
+        'api/arith27',
         'api/energy',
         'api/grid',
         'api/rotation-moves',
@@ -26,7 +27,6 @@ const sidebars: SidebarsConfig = {
         'api/potts',
         'api/tree-corebit',
         'api/projection',
-        'api/arith27',
       ],
     },
     {
