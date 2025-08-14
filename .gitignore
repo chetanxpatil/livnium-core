@@ -10,3 +10,7 @@ build/
 .vscode/
 dump.txt
 dump-example-log.txt
+
+livnium-visualizer/package-lock.json
+livnium-visualizer/node_modules
+
