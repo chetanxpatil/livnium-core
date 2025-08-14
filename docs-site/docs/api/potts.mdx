@@ -1,4 +1,13 @@
-# Potts API
+---
+id: potts
+title: Potts API
+sidebar_label: Potts API
+sidebar_position: 8
+---
+
+27-state Potts network on the 3×3×3 lattice. Useful as an associative memory over base‑27 symbols.
+
+## Quick reference
 
 ```dart
 double cosKernel(int k, int l) {
@@ -6,10 +15,63 @@ double cosKernel(int k, int l) {
   return math.cos(twoPiOver27 * (k - l));
 }
 
+typedef SimilarityKernel = double Function(int k, int l);
+
 class Potts27 {
   Potts27.cube();
-  void buildFromCouplers({required CouplerParams params, required SimilarityKernel kernel, required double targetNorm});
-  void store(List<int> pattern);
-  void relax(int iterations);
+  void buildFromCouplers({
+    required CouplerParams params,
+    required SimilarityKernel kernel,
+    required double targetNorm,
+  });
+  void store(List<int> pattern); // pattern length 27, each digit 0..26
+  void relax(int iterations);    // run iterative relaxation
 }
 ```
+
+## Concepts
+
+- **States**: integers `0..26` (map glyphs via `stringToDigits()`).
+- **Kernel**: similarity between two states. `cosKernel(k,l)` is periodic with period 27:
+  ```
+  cosKernel(k,l) = cos( (2π/27) × (k - l) )
+  ```
+- **Couplers → weights**: `buildFromCouplers` derives a lattice coupling matrix from `CouplerParams` (exposure + distance) and scales it so the induced operator has approximately `targetNorm` (implementation-dependent normalization).
+- **Store/relax**: `store` imprints a 27-length pattern (one state per lattice position). `relax(n)` iterates the network update rule `n` times to settle toward an attractor.
+
+## Typical workflow
+
+```dart
+import 'dart:math' as math;
+
+// 1) Choose coupler parameters and kernel
+final p = CouplerParams(tau0: 1.0, alpha: 1.0);
+final kernel = cosKernel;
+
+// 2) Create a Potts model on the 3×3×3 cube
+final potts = Potts27.cube();
+
+// 3) Build weights from the geometric couplers, normalized
+potts.buildFromCouplers(params: p, kernel: kernel, targetNorm: 1.0);
+
+// 4) Encode a word to digits and store it (expects length 27 if you use full-lattice patterns)
+final digits = stringToDigits('a0bcdefghijklmnopqrstuvwxyz'); // example only
+if (digits != null && digits.length == 27) {
+  potts.store(digits);
+}
+
+// 5) Relax toward an attractor
+potts.relax(10);
+```
+
+## Notes
+- `pattern` must use digits `0..26`. If you work with glyphs, convert with **Alphabet API** helpers.
+- Lattice order for the 27 positions should match `cube3Coords()` enumeration used internally (check your implementation to ensure consistent indexing).
+- `targetNorm` controls overall strength; larger values produce stronger attraction but may reduce basin diversity.
+- `relax` update rule (synchronous vs asynchronous) is implementation-defined; use higher iteration counts for convergence tests.
+
+## See also
+- **[Coupler API](/api/coupler)** — geometric coupling and parameters.
+- **[Grid API](/api/grid)** — coordinate enumeration & distances.
+- **[Alphabet API](/api/alphabet)** — glyph↔digit mapping.
+- **[Arithmetic API](/api/arith27)** — base‑27 conversions.

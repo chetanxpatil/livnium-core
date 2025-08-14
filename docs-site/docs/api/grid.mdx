@@ -1,13 +1,69 @@
-# Grid API
+---
+id: grid
+title: Grid API
+sidebar_label: Grid API
+sidebar_position: 5
+---
+
+3×3×3 lattice helpers and distance metrics.
+
+## Quick reference
 
 ```dart
-Iterable<Vec3> cube3Coords();
-bool isCore(Vec3 v);
-bool isCenter(Vec3 v);
-bool isEdge(Vec3 v);
-bool isCorner(Vec3 v);
-int facesForVec3(Vec3 v);
-int l1(Vec3 v);
-int linf(Vec3 v);
-double l2(Vec3 v);
+Iterable<Vec3> cube3Coords(); // yields all 27 positions with x,y,z ∈ {-1,0,1}
+
+bool isCore(Vec3 v);    // (0,0,0)
+bool isCenter(Vec3 v);  // exposure 1 (face centers)
+bool isEdge(Vec3 v);    // exposure 2
+bool isCorner(Vec3 v);  // exposure 3
+
+int    facesForVec3(Vec3 v); // 0..3 exposure for v
+int    l1(Vec3 v);           // |x| + |y| + |z|
+int    linf(Vec3 v);         // max(|x|, |y|, |z|)
+double l2(Vec3 v);           // sqrt(x^2 + y^2 + z^2)
 ```
+
+### Coordinate system
+- Domain: `x,y,z ∈ {-1, 0, 1}`
+- Core: `(0,0,0)`
+- Exposure classes by non‑zero axes count:
+  - 0 → **core** (1 point)
+  - 1 → **center** (6 points)
+  - 2 → **edge** (12 points)
+  - 3 → **corner** (8 points)
+
+Total = `1 + 6 + 12 + 8 = 27`.
+
+### Distances
+- `l1(v)`: Manhattan shells `{0,1,2,3}` partition the lattice
+  - counts: `L1=0 → 1`, `1 → 6`, `2 → 12`, `3 → 8`
+- `linf(v)`: Chebyshev radius in `{0,1}` for core/face/edge/corner layers
+- `l2(v)`: Euclidean length (useful for visualization/weighting)
+
+
+## Examples
+
+```dart
+final all = cube3Coords().toList();  // length == 27
+
+final v = Vec3(1, 0, -1);
+isCore(v);      // false
+isCenter(v);    // false
+isEdge(v);      // true  (two non-zero axes)
+isCorner(v);    // false
+facesForVec3(v);// 2
+
+l1(v);          // 2
+linf(v);        // 1
+l2(v);          // 1.4142135623730951
+```
+
+## Notes
+- Exposure is purely geometric (independent of symbol mapping).
+- Use `facesForVec3(v)` to bridge geometry → energy or coupling models.
+- Functions are `O(1)`; `cube3Coords()` is deterministic and ordered by a fixed scan.
+
+## See also
+- **[Concepts: Grid & distances](/concepts/grid-and-metrics)** — background and counts.
+- **[Energy API](/api/energy)** — exposure → energy.
+- **[Coupler API](/api/coupler)** — uses `L1` and `faces`.

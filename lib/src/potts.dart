@@ -3,7 +3,6 @@ library;
 import 'dart:math' as math;
 
 import 'grid.dart';
-import 'vec3.dart';
 import 'coupler.dart';
 
 typedef SimilarityKernel = double Function(int k, int l);
