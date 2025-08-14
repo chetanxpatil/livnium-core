@@ -1,10 +1,92 @@
-# Alphabet API
+---
+id: alphabet
+title: Alphabet API
+sidebar_label: Alphabet API
+sidebar_position: 1
+---
+
+Base-27 glyph set used across Livnium Core.
+
+- **Digits (0–26):** `0, a, b, …, z`
+- **Radix:** `kRadix = 27`
+- **Glyph→digit**: `'0'→0`, `'a'→1`, …, `'z'→26`
+- **Digit→glyph**: `0→'0'`, `1→'a'`, …, `26→'z'`
+
+:::note Terminology
+A **glyph** is a character (`'0'..'z'`). A **digit** is its numeric value (`0..26`).
+:::
+
+## Quick reference
 
 ```dart
 const int kRadix = 27;
-int? symbolToValue(String ch);
-String? valueToSymbol(int v);
-List<int>? stringToDigits(String s);
-String digitsToString(List<int> d);
-bool isValidWord(String s);
+
+int?    symbolToValue(String ch);   // one glyph → digit (0..26) or null
+String? valueToSymbol(int v);       // digit (0..26) → glyph or null
+List<int>? stringToDigits(String s);// word → digits[] or null if any glyph invalid
+String  digitsToString(List<int> d);// digits[] → word; expects each in 0..26
+bool    isValidWord(String s);      // true iff every glyph is in the alphabet
 ```
+
+## Mapping
+
+| Glyph | Digit | Glyph | Digit | Glyph | Digit |
+|------:|------:|------:|------:|------:|------:|
+| `0`   | 0     | `j`   | 10    | `s`   | 19    |
+| `a`   | 1     | `k`   | 11    | `t`   | 20    |
+| `b`   | 2     | `l`   | 12    | `u`   | 21    |
+| `c`   | 3     | `m`   | 13    | `v`   | 22    |
+| `d`   | 4     | `n`   | 14    | `w`   | 23    |
+| `e`   | 5     | `o`   | 15    | `x`   | 24    |
+| `f`   | 6     | `p`   | 16    | `y`   | 25    |
+| `g`   | 7     | `q`   | 17    | `z`   | 26    |
+| `h`   | 8     | `r`   | 18    |       |       |
+| `i`   | 9     |       |       |       |       |
+
+## Usage
+
+### Validate
+
+```dart
+isValidWord('a0z');   // true
+isValidWord('A0z');   // false (uppercase not allowed)
+isValidWord('a-');    // false
+```
+
+### Convert glyphs ↔ digits
+
+```dart
+symbolToValue('a');   // 1
+symbolToValue('0');   // 0
+symbolToValue('@');   // null
+
+valueToSymbol(26);    // 'z'
+valueToSymbol(27);    // null
+```
+
+### Whole-word transforms
+
+```dart
+stringToDigits('a0z');      // [1, 0, 26]
+stringToDigits('bad!');     // null
+
+digitsToString([1,0,26]);   // 'a0z'
+// Expects each digit in 0..26; validate beforehand if unsure.
+```
+
+## Edge cases & guarantees
+
+- All APIs are **case-sensitive** (`'A'` is invalid).
+- `stringToDigits` returns `null` if **any** character is outside the alphabet.
+- `digitsToString` **assumes** each element is in `0..26`. Validate your list or sanitize first.
+- Leading `'0'` glyphs are preserved: `stringToDigits('0ab') → [0,1,2]` and back.
+- Time complexity: all ops are **O(n)** over string/array length; the tables are constant-size.
+
+:::tip Patterns
+Use `isValidWord(s)` → `stringToDigits(s)` → arithmetic/encoding → `digitsToString(d)` for round-trips.
+:::
+
+## See also
+- **[Arithmetic (base-27)](/api/arith27)** — add/balanced/cyclic and carry-save.
+- **[Codecs](/api/codec)** — CSV, fixed, decimal, raw encodings built on this alphabet.
+- **[Energy Model](/concepts/energy-model)** — how glyph classes map to exposure/energy.

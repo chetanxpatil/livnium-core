@@ -1,13 +1,87 @@
-# Energy API
+---
+id: energy
+title: Energy API
+sidebar_label: Energy API
+sidebar_position: 4
+---
+
+
+Energy functions over the 3×3×3 lattice, using two scales:
+
+- **SE9**: per-face unit = 9 → center=9, edge=18, corner=27, core=0.
+- **K-units**: per-face unit = K, where `K = equilibriumConstant = 10.125` → center=1K, edge=2K, corner=3K, core=0.
+
+Default glyph→exposure mapping (conventional):
+- `'0'` → **core** (0 faces)
+- `'a'..'f'` → **center** (1 face)
+- `'g'..'r'` → **edge** (2 faces)
+- `'s'..'z'` → **corner** (3 faces)
+
+> Use the CLI `livnium mapping` to inspect or regenerate mappings.
+
+## Quick reference
 
 ```dart
 enum SymbolClass { core, center, edge, corner }
 
-int facesForGlyph(String ch);
-double symbolEnergy9(String word);
-double wordEnergy9(String word);
-double symbolEnergyK(String word);
-double wordEnergyK(String word);
-const double equilibriumConstant = 27 / 8 + 27 / 12 + 27 / 6; // 10.125
-double perFaceUnitEnergy(int faces);
+int    facesForGlyph(String ch);    // 0,1,2,3 based on the conventional mapping
+double symbolEnergy9(String s);     // expects a single-glyph string, SE9 scale
+double wordEnergy9(String word);    // sum of glyph energies (SE9)
+double symbolEnergyK(String s);     // expects a single-glyph string, K scale
+double wordEnergyK(String word);    // sum of glyph energies (K)
+const  double equilibriumConstant = 27 / 8 + 27 / 12 + 27 / 6; // 10.125
+double perFaceUnitEnergy(int faces); // per-face unit for a class (SE9=9 per face; K uses equilibriumConstant)
 ```
+
+## Constants and scales
+
+```
+equilibriumConstant = 27/8 + 27/12 + 27/6 = 10.125
+SE9 per-face unit   = 9
+K per-face unit     = equilibriumConstant
+```
+
+Class energies per glyph:
+- **core (0 faces)**: 0
+- **center (1 face)**: 9 (SE9) or 1 × K
+- **edge (2 faces)**: 18 (SE9) or 2 × K
+- **corner (3 faces)**: 27 (SE9) or 3 × K
+
+## Functions
+
+### `facesForGlyph(String ch) → int`
+Returns 0, 1, 2, or 3 for core/center/edge/corner under the conventional mapping.
+
+### `symbolEnergy9(String s) → double` and `symbolEnergyK(String s) → double`
+Energy of a **single** glyph `s` in SE9 or K units. If `s.length != 1` or glyph invalid, behavior depends on implementation (typically throws or returns 0). Prefer passing one-character strings.
+
+### `wordEnergy9(String word) → double` and `wordEnergyK(String word) → double`
+Sum of per-glyph energies of `word` in the requested scale. Invalid glyphs cause the function to return `null` or throw, depending on your implementation version.
+
+### `perFaceUnitEnergy(int faces) → double`
+Returns the energy-per-face for a given exposure class. In SE9 this is 9 for faces in {1,2,3}, and 0 for 0. For K-units, multiply `faces` by `equilibriumConstant` yourself.
+
+## Examples
+
+```dart
+facesForGlyph('0');  // 0  (core)
+facesForGlyph('b');  // 1  (center)
+facesForGlyph('n');  // 2  (edge)
+facesForGlyph('y');  // 3  (corner)
+
+symbolEnergy9('b');  // 9
+symbolEnergyK('b');  // 10.125
+
+wordEnergy9('bny');  // 9 + 18 + 27 = 54
+wordEnergyK('bny');  // 1K + 2K + 3K = 6 * 10.125 = 60.75
+```
+
+## Notes
+- The **core** class is represented by glyph `'0'` in the conventional mapping; it contributes zero energy.
+- If you switch to a different mapping strategy (e.g., a harmonic mapping), ensure `facesForGlyph` and the energy functions are updated accordingly.
+- Energies scale linearly with word length and are independent of glyph order.
+
+## See also
+- **[Concepts: Energy Model](/concepts/energy-model)** — background and rationale for SE9 and K.
+- **[Coupler](/api/coupler)** — uses `equilibriumConstant` in its coupling formula.
+- **[CLI](/cli)** — `livnium energy <word> [--k]`.

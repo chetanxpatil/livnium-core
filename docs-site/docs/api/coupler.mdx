@@ -1,13 +1,89 @@
-# Coupler API
+---
+id: coupler
+title: Coupler API
+sidebar_label: Coupler API
+sidebar_position: 3
+---
+
+Coupling model and helpers for ranking lattice positions by influence.
+
+## Quick reference
 
 ```dart
 class CouplerParams {
-  final double tau0;
-  final double alpha;
+  final double tau0;   // amplitude (gain)
+  final double alpha;  // path-loss exponent
   const CouplerParams({this.tau0 = 1.0, this.alpha = 1.0});
 }
 
 double couplingAt(Vec3 v, CouplerParams p);
 List<({Vec3 pos, double C, int L, int faces})> rankTopCouplers(CouplerParams p, int topN);
+
 double complexSumMagnitude(List<double> values);
 ```
+
+## Model
+
+```
+C(v) = tau0 × (10.125 / faces(v)) × 1 / (L1(v))^alpha
+```
+
+- `faces(v)`: exposure count in the 3×3×3 lattice (core excluded)
+  - center (on a face): 1
+  - edge: 2
+  - corner: 3
+- `L1(v)`: Manhattan distance from the core `(0,0,0)` (≥ 1 for non-core points)
+- `tau0`, `alpha`: tunable parameters
+
+> 10.125 is the equilibrium constant used across the energy model, chosen so that center/edge/corner classes have clean ratios in K-units.
+
+## Functions
+
+### `couplingAt(Vec3 v, CouplerParams p) → double`
+Returns the coupling magnitude at a lattice coordinate `v` using the model above.
+
+### `rankTopCouplers(CouplerParams p, int topN) → List<Record>`
+Returns the strongest `topN` non-core positions.
+
+Each record contains:
+- `pos: Vec3` — coordinate `(x,y,z)` in `{ -1,0,1 }`
+- `C: double` — coupling magnitude
+- `L: int` — `L1(pos)`
+- `faces: int` — exposure count (1,2,3)
+
+### `complexSumMagnitude(List<double> values) → double`
+Interprets `values` as **interleaved complex pairs** `[re0, im0, re1, im1, …]`,
+sums them component-wise, and returns the magnitude of the resulting phasor:
+
+```
+|Σ_k (re_k + i·im_k)| = sqrt( (Σ re_k)^2 + (Σ im_k)^2 )
+```
+
+Input must have even length; pairs are processed in order.
+
+## Examples
+
+```dart
+final p = CouplerParams(tau0: 1.0, alpha: 1.5);
+
+final c = couplingAt(Vec3(1, 0, 0), p);  // face center
+// -> positive double
+
+final top = rankTopCouplers(p, 5);
+// top.forEach((t) => print('pos=${t.pos} L=${t.L} faces=${t.faces} C=${t.C}'));
+
+final mag = complexSumMagnitude([1.0, 0.0, 0.0, 1.0]); // (1+0i) + (0+1i)
+// mag == sqrt( (1+0)^2 + (0+1)^2 ) = sqrt(2)
+```
+
+## Notes
+- Core `(0,0,0)` is excluded by design (undefined exposure).
+- If you need stable ordering when magnitudes tie, sort by `(L asc, faces desc, pos.lex)` after ranking.
+- Typical ranges:
+  - `tau0 > 0`
+  - `alpha ≥ 0` (0 → no distance penalty; 2 → inverse-square-like)
+
+## See also
+- **[Energy Model](/concepts/energy-model)** — SE9 vs K and the 10.125 constant.
+- **[Grid](/api/grid)** — exposure/`faces(v)` and `L1(v)` definitions.
+- **[CLI](/cli)** — `livnium couplers --n 5 --alpha 1.5`.

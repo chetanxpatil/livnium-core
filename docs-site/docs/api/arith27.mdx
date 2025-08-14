@@ -1,8 +1,70 @@
-# Base-27 arithmetic API
+---
+id: arith27
+title: Arithmetic API
+sidebar_label: Arithmetic API
+sidebar_position: 2
+---
+
+Canonical positional arithmetic over the Livnium alphabet (`0,a..z` → digits `0..26`).
+
+**Value definition (positional)**
+
+For a word `s = g₀ g₁ … gₙ₋₁` with digits `dᵢ = symbolToValue(gᵢ)`:
+
+```
+val(s) = Σ i=0..n-1  d_i × 27^(n-1-i)
+```
+
+:::tip
+Decimal numerals like "123" are **not** valid words (there is no glyph '1'). Use `fromDecimal`/`toDecimal` to convert.
+:::
+
+## Quick reference
 
 ```dart
-bool _valid(String s);
-BigInt? toDecimal(String s);
-String? fromDecimal(BigInt n);
-String? add27(String a, String b);
+bool   _valid(String s);          // internal: same semantics as isValidWord(s)
+BigInt? toDecimal(String s);      // word → BigInt (positional base-27), or null
+String? fromDecimal(BigInt n);    // BigInt → canonical word (no leading junk), or null if n<0
+String? add27(String a, String b);// canonical addition with carries, or null on invalid input
 ```
+
+### Guarantees
+- `_valid(s)` returns true iff every glyph is in the alphabet '0' and 'a'..'z'.
+- `toDecimal` treats the leftmost glyph as **most significant**.
+- `fromDecimal(0)` returns "0"; for `n>0` it returns the shortest canonical word (no unnecessary leading '0').
+- `add27` is equivalent to `fromDecimal(toDecimal(a) + toDecimal(b))` with input validation.
+
+## Examples
+
+### Convert word ↔ decimal
+```dart
+toDecimal('a');     // 1
+toDecimal('z');     // 26
+toDecimal('a0');    // 27            (1·27 + 0)
+toDecimal('ba');    // 55            (2·27 + 1)
+
+fromDecimal(BigInt.zero);        // "0"
+fromDecimal(BigInt.from(27));    // "a0"
+fromDecimal(BigInt.from(28));    // "aa"
+```
+
+### Addition
+```dart
+add27('a', 'z');      // "a0"     (1 + 26 = 27)
+add27('z', 'z');      // "ay"     (26 + 26 = 52 → 1·27 + 25)
+add27('a0', 'a');     // "aa"     (27 + 1 = 28)
+add27('0', '0');      // "0"
+// Invalid inputs return null:
+add27('A', 'a');      // null (uppercase unsupported)
+add27('a1', 'a');     // null ('1' is not a glyph)
+```
+
+## Edge cases
+- Negative inputs to `fromDecimal` return `null`.
+- Leading '0' glyphs in a valid word are **preserved** when going word → word via arithmetic only if they are significant in the result; e.g. `add27('0a', '0')` may or may not keep the leading '0' — use padding at the application layer if fixed width is required.
+- All operations run in O(n) in the length of the input strings; big‑int math depends on operand size.
+
+## See also
+- **[Alphabet](/api/alphabet)** — glyph↔digit mapping used here.
+- **[Codecs](/api/codec)** — fixed/CSV/decimal/raw encodings.
+- **[CLI](/cli)** — `livnium add`, `livnium encode/ decode` commands.
