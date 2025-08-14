@@ -1,16 +1,17 @@
-
 .dart_tool/
-
 pubspec.lock
+
 # Dart / Flutter
 .packages
 build/
+
 # VS Code / IntelliJ caches
 .idea/
 .vscode/
+
 dump.txt
 dump-example-log.txt
 
 livnium-visualizer/package-lock.json
-livnium-visualizer/node_modules
-
+livnium-visualizer/node_modules/
+livnium-visualizer/.DS_Store
