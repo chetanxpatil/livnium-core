@@ -1,0 +1,15 @@
+# Potts API
+
+```dart
+double cosKernel(int k, int l) {
+  const twoPiOver27 = 2 * math.pi / 27.0;
+  return math.cos(twoPiOver27 * (k - l));
+}
+
+class Potts27 {
+  Potts27.cube();
+  void buildFromCouplers({required CouplerParams params, required SimilarityKernel kernel, required double targetNorm});
+  void store(List<int> pattern);
+  void relax(int iterations);
+}
+```

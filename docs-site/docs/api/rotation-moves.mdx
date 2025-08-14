@@ -1,0 +1,15 @@
+# Rotation & moves API
+
+```dart
+Vec3 rotateX(Vec3 v);
+Vec3 rotateY(Vec3 v);
+Vec3 rotateZ(Vec3 v);
+Vec3 applyRotations(Vec3 v, Iterable<Rotation> rs);
+Iterable<Rotation> invertRotations(Iterable<Rotation> rs);
+
+enum Face { U, D, L, R, F, B }
+class FaceMove { /* axis + turns */ }
+List<int> permutationFor(List<FaceMove> moves);
+List<T> applyPerm<T>(List<T> items, List<int> perm);
+List<FaceMove> applyMoves(List<FaceMove> moves);
+```

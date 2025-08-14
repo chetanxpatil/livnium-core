@@ -1,0 +1,13 @@
+# Coupler API
+
+```dart
+class CouplerParams {
+  final double tau0;
+  final double alpha;
+  const CouplerParams({this.tau0 = 1.0, this.alpha = 1.0});
+}
+
+double couplingAt(Vec3 v, CouplerParams p);
+List<({Vec3 pos, double C, int L, int faces})> rankTopCouplers(CouplerParams p, int topN);
+double complexSumMagnitude(List<double> values);
+```

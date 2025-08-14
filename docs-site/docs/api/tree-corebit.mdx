@@ -1,0 +1,27 @@
+# Tree & CoreBit API
+
+```dart
+class CubePath {
+  CubePath.parse(String dotted);
+  CubePath child(int d);
+  @override String toString();
+}
+
+class MicroCube {
+  final List<int> symbols;
+  final Map<int, MicroCube> children;
+  MicroCube({this.energyBudget = 10.125});
+  MicroCube ensureChild(int pos);
+}
+
+class LivniumTree {
+  final MicroCube root;
+  LivniumTree();
+}
+
+class CoreBit {
+  void configureCenter(int digit, double beta);
+  void relax({int maxIters = 10});
+  String get centerSymbolString;
+}
+```

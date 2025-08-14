@@ -1,0 +1,14 @@
+# Energy model
+
+Exposure drives energy. The equilibrium constant derives from the lattice:
+
+```dart
+const double equilibriumConstant = 27 / 8 + 27 / 12 + 27 / 6; // 10.125
+
+double perFaceUnitEnergy(int faces) {
+  if (faces <= 0 || faces > 3) {
+    throw ArgumentError('faces must be 1..3');
+  }
+  return equilibriumConstant / faces;
+}
+```

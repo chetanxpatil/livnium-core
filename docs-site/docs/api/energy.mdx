@@ -1,0 +1,13 @@
+# Energy API
+
+```dart
+enum SymbolClass { core, center, edge, corner }
+
+int facesForGlyph(String ch);
+double symbolEnergy9(String word);
+double wordEnergy9(String word);
+double symbolEnergyK(String word);
+double wordEnergyK(String word);
+const double equilibriumConstant = 27 / 8 + 27 / 12 + 27 / 6; // 10.125
+double perFaceUnitEnergy(int faces);
+```

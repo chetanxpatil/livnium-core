@@ -15,3 +15,6 @@ dump-example-log.txt
 livnium-visualizer/package-lock.json
 livnium-visualizer/node_modules/
 livnium-visualizer/.DS_Store
+
+# macOS system files
+.DS_Store
