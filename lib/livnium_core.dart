@@ -70,3 +70,10 @@ export 'src/corebit.dart' show CoreBit;
 // New public exports for examples
 export 'src/generate_mapping.dart' show generateExposureMapping;
 export 'src/projection.dart' show dropAxis, radialBins, coarseGrain;
+
+// add with the others
+export 'src/arith27.dart'
+    show toDecimal, fromDecimal, add27, add27Balanced, add27Cyclic,
+    add27CarrySave3, csFinish;
+
+export 'src/validate.dart' show runAllSelfChecks;

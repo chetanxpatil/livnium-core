@@ -4,7 +4,7 @@ import 'dart:io';
 /// `test`, and `example` directories. The content is written to `dump.txt`
 /// in the project root. Existing files are overwritten.
 void main() {
-  final directories = ['lib', 'test', 'example'];
+  final directories = ['lib', 'test', 'example', 'bin'];
   final buffer = StringBuffer();
 
   for (final dirPath in directories) {

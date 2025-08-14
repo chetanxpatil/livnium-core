@@ -74,3 +74,7 @@ bool _runAllSelfChecks() {
 
   return true;
 }
+
+// Public wrapper for CLI/tests
+bool runAllSelfChecks() => _runAllSelfChecks();
+
