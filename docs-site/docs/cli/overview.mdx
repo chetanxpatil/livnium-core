@@ -47,156 +47,18 @@ livnium <command> [options]
 | `mapping`  | Generate exposure mapping (conventional/harmonic) | `livnium mapping --mode harmonic`               |
 | `validate` | Run internal self-checks                          | `livnium validate`                              |
 
----
+For detailed usage of each command, see:
 
-## Encoders & decoders
-
-### `encode`
-
-```bash
-livnium encode --codec <csv|fixed|decimal|raw> <word>
-```
-
-**Pick a format:**
-
-* `csv` → human-readable digits: `a0z` → `1,0,26`
-* `fixed` → two digits per symbol: `a0z` → `010026`  *(preserves length)*
-* `decimal` (**dec**) → length-preserving decimal BigInt: `a0` → `731`
-* `raw` → pure base-27 value: `a0` → `27`
-
-\:::caution RAW decoding needs length
-`raw` collapses leading `0`s. To decode, pass the original length:
-
-```bash
-livnium decode --codec raw 27 --len 2   # -> 'a0'
-```
-
-\:::
-
-### `decode`
-
-```bash
-livnium decode --codec <csv|fixed|decimal|raw> <payload> [--len N]
-```
-
-Examples:
-
-```bash
-livnium decode --codec csv "1,0,26"      # a0z
-livnium decode --codec fixed 010026      # a0z
-livnium decode --codec decimal 731       # a0
-livnium decode --codec raw 53 --len 3    # 0az
-```
-
----
-
-## Arithmetic
-
-### `add` (canonical/balanced/cyclic)
-
-```bash
-livnium add --mode <canonical|balanced|cyclic> <a> <b>
-```
-
-* **canonical**: normal addition with carries
-* **balanced**: uses centered digits to keep results near zero
-* **cyclic**: per-digit mod-27, **no carries**
-
-### `cs` (carry-save, three inputs)
-
-```bash
-livnium cs <a> <b> <c>
-```
-
-Prints `sum=... carry=... final=...` where `final` is the resolved result.
-
----
-
-## Energy
-
-### `energy`
-
-```bash
-livnium energy <word> [--k]
-```
-
-* Default: **SE9** scale (center=9, edge=18, corner=27; core=0)
-* With `--k`: **K-units** using `K = 10.125` (center=1K, edge=2K, corner=3K)
-
-Examples:
-
-```bash
-livnium energy bny          # 54
-livnium energy bny --k      # 60.75
-```
-
----
-
-## Geometry & coupling
-
-### `couplers`
-
-```bash
-livnium couplers [--n N] [--tau0 T] [--alpha A]
-```
-
-Ranks non-core positions by a simple exposure- and distance-aware model.
-Useful to see which lattice points “influence” most under your parameters.
-
-Example:
-
-```bash
-livnium couplers --n 5 --alpha 1.5
-```
-
----
-
-## Moves & permutations
-
-### `moves`
-
-```bash
-livnium moves --seq "U R F' D2"
-```
-
-* Faces: `U D L R F B`
-* Suffix: `'(prime)` = counter-clockwise, `2` = half-turn, none = clockwise
-  Emits the **27-index permutation** and shows it applied to `[0..26]`.
-
----
-
-## Projections & mapping
-
-### `project`
-
-```bash
-livnium project --radial | --coarse-faces | --drop <x|y|z>
-```
-
-* `--radial` → L1 shells (0..3)
-* `--coarse-faces` → exposure classes (0..3)
-* `--drop <axis>` → bucket by the other two axes
-
-### `mapping`
-
-```bash
-livnium mapping [--mode conventional|harmonic]
-```
-
-Outputs `symbol,faces,side` for your mapping strategy.
-
----
-
-## Validation
-
-### `validate`
-
-```bash
-livnium validate
-```
-
-Runs internal self-checks (alphabet/codec round-trips, rotations, grid counts, energy constants).
-Exits **0** on success, **1** on failure.
+- [encode](./encode)
+- [decode](./decode)
+- [add](./add)
+- [cs](./cs)
+- [energy](./energy)
+- [couplers](./couplers)
+- [moves](./moves)
+- [project](./project)
+- [mapping](./mapping)
+- [validate](./validate)
 
 ---
 
@@ -216,4 +78,3 @@ Exits **0** on success, **1** on failure.
 * **[Energy API](/api/energy)** — SE9 vs K
 * **[Grid API](/api/grid)** — coordinates & distances
 * **[Rotation & Moves](/api/rotation-moves)** • **[Projection](/api/projection)** • **[Coupler](/api/coupler)**
-```

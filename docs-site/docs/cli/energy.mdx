@@ -1,0 +1,19 @@
+---
+id: energy
+title: energy
+sidebar_label: energy
+---
+
+```bash
+livnium energy <word> [--k]
+```
+
+* Default: **SE9** scale (center=9, edge=18, corner=27; core=0)
+* With `--k`: **K-units** using `K = 10.125` (center=1K, edge=2K, corner=3K)
+
+Examples:
+
+```bash
+livnium energy bny          # 54
+livnium energy bny --k      # 60.75
+```
