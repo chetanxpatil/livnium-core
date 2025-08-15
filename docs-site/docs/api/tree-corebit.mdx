@@ -1,27 +1,103 @@
-# Tree & CoreBit API
+---
+id: tree-corebit
+title: Tree & CoreBit API
+sidebar_label: Tree & CoreBit API
+sidebar_position: 9
+---
+
+Hierarchical 27‑ary micro‑cube tree for composing larger structures and a small "CoreBit" unit for local relaxation.
+
+## Quick reference
 
 ```dart
 class CubePath {
-  CubePath.parse(String dotted);
-  CubePath child(int d);
-  @override String toString();
+  CubePath.parse(String dotted); // e.g., "s.y.a" → [19,25,1]
+  CubePath child(int d);         // append digit (0..26)
+  @override String toString();   // back to dotted glyphs
 }
 
 class MicroCube {
-  final List<int> symbols;
-  final Map<int, MicroCube> children;
+  final List<int> symbols;                // length 27, digits 0..26
+  final Map<int, MicroCube> children;     // optional children by slot 0..26
   MicroCube({this.energyBudget = 10.125});
-  MicroCube ensureChild(int pos);
+  MicroCube ensureChild(int pos);         // create/access child at pos
 }
 
 class LivniumTree {
   final MicroCube root;
-  LivniumTree();
+  LivniumTree();                          // root micro‑cube
 }
 
 class CoreBit {
-  void configureCenter(int digit, double beta);
-  void relax({int maxIters = 10});
-  String get centerSymbolString;
+  void configureCenter(int digit, double beta); // bias center toward digit
+  void relax({int maxIters = 10});              // local relaxation
+  String get centerSymbolString;                // glyph at center after relax
 }
 ```
+
+## Concepts
+
+- **CubePath** — base‑27 address from the root using glyphs `0,a..z`, dot‑separated.
+- **MicroCube** — a 3×3×3 lattice node with 27 slots. Each slot can hold a digit `0..26` and optionally a **child** `MicroCube` to form a tree (fan‑out 27).
+- **LivniumTree** — convenience wrapper with a `root` micro‑cube plus helpers (e.g., set/get symbol and hierarchical evolution in your implementation).
+- **CoreBit** — a minimal local unit you can bias (e.g., toward a center glyph) and relax iteratively.
+
+> The default `energyBudget = 10.125` mirrors the K‑unit equilibrium constant to keep scales consistent with the **Energy** and **Coupler** models.
+
+## Addressing with `CubePath`
+
+```dart
+final p = CubePath.parse('s.y.a'); // digits [19,25,1]
+final q = p.child(0);              // append digit 0 → [19,25,1,0]
+q.toString();                      // 's.y.a.0'
+```
+
+- Parsing rules: each segment must be a **single glyph** in the alphabet; empty segments or invalid glyphs raise a `FormatException`.
+
+## Building the hierarchy
+
+```dart
+final tree = LivniumTree();
+
+// Ensure a nested node exists under path 'a.b.c'
+final path = CubePath.parse('a.b.c');
+final node = tree.root.ensureChild(1)      // 'a' → 1
+                   .ensureChild(2)         // 'b' → 2
+                   .ensureChild(3);        // 'c' → 3
+
+// Set a symbol at slot 0 (conventionally the core/center index is 13; your API may differ)
+node.symbols[0] = 5; // glyph 'e'
+```
+
+**Rules**
+- Valid child indices are **0..26**. Out‑of‑range throws `RangeError`.
+- A `MicroCube` can host at most 27 distinct children — one per slot.
+
+## CoreBit usage
+
+```dart
+final core = CoreBit();
+core.configureCenter(1 /* 'a' */, 0.25); // bias strength beta = 0.25
+core.relax(maxIters: 12);
+final glyph = core.centerSymbolString;    // e.g., 'a'
+```
+
+- `configureCenter(digit, beta)` biases the center toward a target digit with weight `beta`.
+- `relax(maxIters)` runs the local update loop; read back the resulting glyph from `centerSymbolString`.
+
+## Patterns that work well
+
+- **Majority from children → parent**: aggregate child symbols (e.g., by majority) into the parent slot, then run a **local relax** on the parent. Push a **bias** back down to align children. Repeat (post‑order) up to a depth limit.
+- **Indexing**: keep the 27‑slot order consistent with your `cube3Coords()` enumeration so geometry‑dependent modules (Energy/Coupler) line up.
+
+## Errors & edge cases
+
+- `CubePath.parse('')` returns the **root** path.
+- Creating a child at an existing slot returns the existing node; it does not allocate more than one child per slot.
+- Ensure all digits are in `0..26` — convert from glyphs with **Alphabet API** helpers if needed.
+
+## See also
+- **[Alphabet API](/api/alphabet)** — glyph↔digit mapping used by `CubePath`.
+- **[Grid API](/api/grid)** — position indexing for the 27 slots.
+- **[Energy API](/api/energy)** — K‑unit constant used as the default `energyBudget`.
+- **[Potts API](/api/potts)** — local relaxation engine used inside micro‑cubes.

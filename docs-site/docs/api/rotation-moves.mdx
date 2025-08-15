@@ -1,15 +1,88 @@
-# Rotation & moves API
+---
+id: rotation-moves
+title: Rotation & Moves API
+sidebar_label: Rotation & Moves API
+sidebar_position: 7
+---
+
+Rubik’s-style face moves for the 3×3×3 lattice and utilities to build/apply the resulting permutations over 27 indices.
+
+## Quick reference
 
 ```dart
-Vec3 rotateX(Vec3 v);
-Vec3 rotateY(Vec3 v);
-Vec3 rotateZ(Vec3 v);
-Vec3 applyRotations(Vec3 v, Iterable<Rotation> rs);
-Iterable<Rotation> invertRotations(Iterable<Rotation> rs);
-
+// Faces in standard cube notation
 enum Face { U, D, L, R, F, B }
-class FaceMove { /* axis + turns */ }
-List<int> permutationFor(List<FaceMove> moves);
-List<T> applyPerm<T>(List<T> items, List<int> perm);
-List<FaceMove> applyMoves(List<FaceMove> moves);
+
+// One move = a face and number of quarter turns
+class FaceMove {
+  final Face face;
+  final int quarterTurns; // -1 (counter‑clockwise), 1 (clockwise), 2 (half‑turn)
+  const FaceMove(this.face, this.quarterTurns);
+}
+
+// Permutation for a single move: index -> newIndex (length 27)
+List<int> permutationFor(FaceMove m);
+
+// Apply a permutation to a data array (in‑place)
+void applyPerm<T>(List<T> data, List<int> perm);
 ```
+
+> Indexing convention: the 27 slots are ordered by your project’s fixed scan (typically `cube3Coords()` order). Ensure consistent use across Grid/Energy/Coupler/Examples.
+
+## Notation
+
+- Faces: `U, D, L, R, F, B`
+- Suffixes in strings (CLI/UX layer): no suffix = clockwise `1`, `'` = counter‑clockwise `-1`, `2` = half‑turn `2`.
+- Example sequence: `U R F' D2`
+
+## Examples
+
+```dart
+// Build a sequence manually
+final seq = <FaceMove>[
+  FaceMove(Face.U, 1),
+  FaceMove(Face.R, 1),
+  FaceMove(Face.F, -1),
+  FaceMove(Face.D, 2),
+];
+
+// Compose permutations left‑to‑right
+var perm = List<int>.generate(27, (i) => i);
+for (final m in seq) {
+  final p = permutationFor(m);
+  final tmp = List<int>.from(perm);
+  for (var i = 0; i < perm.length; i++) {
+    perm[i] = p[tmp[i]]; // compose
+  }
+}
+
+// Apply to data
+final data = List<int>.generate(27, (i) => i);
+applyPerm<int>(data, perm);
+// data now contains the permuted 0..26
+```
+
+### Parsing convenience (optional layer)
+
+If you implement a string parser (as used by the CLI) the rules are:
+
+- Tokenize by whitespace
+- First char is the face; remaining substring is the suffix (`''` | `'` | `'2'`)
+- Map to `FaceMove(face, q)` where `q ∈ {-1,1,2}`
+
+```dart
+// Example signature (your project may keep this private to the CLI)
+// List<FaceMove> parseMoves(String s);
+```
+
+## Edge cases
+
+- A `quarterTurns` value of `0` is effectively a no‑op; typically not emitted by parsers.
+- Applying a permutation with a mismatched length throws; always use length 27 with this model.
+- Composition order matters; the example composes left‑to‑right to match the natural reading of sequences.
+
+## See also
+
+- **[Grid API](/api/grid)** — consistent coordinate/indexing.
+- **[Examples: Moves](/examples/moves)** — end‑to‑end permutations.
+- **[CLI](/cli)** — `livnium moves --seq "U R F' D2"`.

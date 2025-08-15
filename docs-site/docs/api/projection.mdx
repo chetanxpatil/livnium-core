@@ -1,7 +1,111 @@
-# Projection API
+---
+id: projection
+title: Projection API
+sidebar_label: Projection API
+sidebar_position: 6
+---
+
+Helpers that bucket the 3×3×3 lattice into useful projections/slices.
+
+## Quick reference
 
 ```dart
+// Drop one axis and bucket points by the remaining two.
+// axis: 'x' | 'y' | 'z'
 Map<(int, int), List<Vec3>> dropAxis(String axis);
+
+// Group by L1 (Manhattan) radius: shells 0..3.
 Map<int, List<Vec3>> radialBins();
+
+// Generic coarse graining by an arbitrary key function.
 Map<K, List<Vec3>> coarseGrain<K>(K Function(Vec3) keyFn);
 ```
+
+## `dropAxis(axis)`
+
+Drop one axis and group by the remaining two coordinates.
+
+- `axis = 'x'`: keys are `(y,z)` pairs
+- `axis = 'y'`: keys are `(x,z)` pairs
+- `axis = 'z'`: keys are `(x,y)` pairs
+
+Each key is a tuple of integers in `{-1,0,1}`. The value is the list of 3D points that map to that 2D bin.
+
+**Example**
+
+```dart
+final yz = dropAxis('x');             // Map<(int,int), List<Vec3>>
+final bucket = yz[(0, 1)] ?? const []; // all points with y=0, z=1 (any x)
+```
+
+Common uses:
+- 2D slices for visualization
+- Heatmaps per face
+- Aggregations by “row/col” after collapsing one axis
+
+## `radialBins()`
+
+Groups by L1 distance from the core. Keys are integers `{0,1,2,3}`; values are the points in each shell.
+
+```
+bins[0] → [(0,0,0)]              // 1 point
+bins[1] → 6 points               // face centers
+bins[2] → 12 points              // edges
+bins[3] → 8 points               // corners
+```
+
+**Example**
+
+```dart
+final r = radialBins();
+print(r[1]!.length); // 6
+```
+
+Use cases:
+- Complexity-aware sampling (core vs shell)
+- Radial summaries (e.g., average energy per shell)
+- Shell-wise coupling/weight tuning
+
+## `coarseGrain(keyFn)`
+
+Generic bucketing by any key you define.
+
+```dart
+// Group by exposure (faces) count: 0..3
+final byFaces = coarseGrain<int>((v) =>
+  ((v.x != 0) ? 1 : 0) + ((v.y != 0) ? 1 : 0) + ((v.z != 0) ? 1 : 0));
+
+// Group by Chebyshev radius (∞-norm)
+final byLinf = coarseGrain<int>((v) =>
+  [v.x.abs(), v.y.abs(), v.z.abs()].reduce((a,b) => a > b ? a : b));
+```
+
+This is the most flexible way to build your own projections/partitions over the cube.
+
+## Examples
+
+```dart
+// Count how many points land in each (x,y) cell when dropping z
+final xy = dropAxis('z');
+for (final entry in xy.entries) {
+  final (x, y) = entry.key;
+  final count = entry.value.length;
+  print('cell=($x,$y) count=$count'); // each is 3 along the dropped axis
+}
+
+// Radial shell counts
+final shells = radialBins();
+for (final k in [0,1,2,3]) {
+  print('L1=$k -> ${shells[k]?.length ?? 0} points');
+}
+```
+
+## Notes
+- All keys and coordinates are integers in `{-1,0,1}`.
+- Buckets are deterministic — iteration order of the map keys depends on the runtime’s map semantics; sort keys if you need stable output.
+- `coarseGrain` lets you mirror the grouping used by **Energy** or **Coupler** by making `keyFn` compute exposure, `L1`, or any derived label.
+
+## See also
+- **[Grid API](/api/grid)** — positions, distances, exposure.
+- **[Examples: Projections](/examples/projections)** — end-to-end usage.
+- **[CLI](/cli)** — `livnium project --radial | --coarse-faces | --drop <x|y|z>`.
