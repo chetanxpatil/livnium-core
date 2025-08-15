@@ -5,37 +5,19 @@ import * as THREE from "three";
 import { OrbitControls as ThreeOrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 
 /** -------- math / helpers -------- */
-const K = 10.125;
+const K = window.livnium.equilibriumConstant();
 const facesForVec = ({ x, y, z }) => (x !== 0) + (y !== 0) + (z !== 0);
 const l1 = ({ x, y, z }) => Math.abs(x) + Math.abs(y) + Math.abs(z);
-const rotX90 = ({ x, y, z }) => ({ x, y: -z, z: y });
-const rotY90 = ({ x, y, z }) => ({ x: z, y, z: -x });
-const rotZ90 = ({ x, y, z }) => ({ x: -y, y: x, z });
-const rotateNTimes = (v, fn, n) => {
-  let p = { ...v };
-  const t = ((n % 4) + 4) % 4;
-  for (let i = 0; i < t; i++) p = fn(p);
-  return p;
-};
-
-const Moves = {
-  U: { select: (v) => v.z === 1, axis: "z" },
-  D: { select: (v) => v.z === -1, axis: "z" },
-  R: { select: (v) => v.x === 1, axis: "x" },
-  L: { select: (v) => v.x === -1, axis: "x" },
-  F: { select: (v) => v.y === 1, axis: "y" },
-  B: { select: (v) => v.y === -1, axis: "y" }
-};
 
 function applyMove(cubelets, token) {
   const face = token[0];
-  if (!Moves[face]) return cubelets;
-  let turns = 1;
-  if (token.endsWith("2")) turns = 2;
-  else if (token.endsWith("'")) turns = 3;
-  const { select, axis } = Moves[face];
-  const fn = axis === "x" ? rotX90 : axis === "y" ? rotY90 : rotZ90;
-  return cubelets.map((c) => (select(c.pos) ? { ...c, pos: rotateNTimes(c.pos, fn, turns) } : c));
+  const turns = token.endsWith("2") ? 2 : token.endsWith("'") ? -1 : 1;
+  const perm = window.livnium.permutationFor({ face, quarterTurns: turns });
+  const next = new Array(perm.length);
+  for (let i = 0; i < perm.length; i++) {
+    next[perm[i]] = { ...cubelets[i], pos: cubelets[perm[i]].pos };
+  }
+  return next;
 }
 
 const parseSequence = (seq) =>
@@ -46,11 +28,8 @@ const colorByExposure = (pos) =>
   [ "#9ca3af", "#4ade80", "#60a5fa", "#f472b6" ][facesForVec(pos)] ?? "#fff";
 
 function couplerMagnitude(pos, alpha = 1, tau0 = 1) {
-  const faces = facesForVec(pos);
-  if (faces <= 0) return 0;
-  const base = K / faces;
-  const loss = Math.pow(l1(pos), alpha);
-  return (tau0 * base) / (loss || 1);
+  const params = window.livnium.makeCouplerParams(tau0, alpha);
+  return window.livnium.couplingAt(pos.x, pos.y, pos.z, params);
 }
 function colorByCoupler(pos, alpha, tau0) {
   const c = couplerMagnitude(pos, alpha, tau0);
