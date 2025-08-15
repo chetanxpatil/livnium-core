@@ -1,0 +1,3602 @@
+//// BEGIN FILE: lib/livnium_core.dart
+library;
+
+export 'src/alphabet.dart'
+    show
+        kRadix,
+        symbolToValue,
+        valueToSymbol,
+        stringToDigits,
+        digitsToString,
+        isValidWord;
+
+export 'src/codec.dart'
+    show
+        encodeCsv,
+        decodeCsv,
+        encodeFixed,
+        decodeFixed,
+        encodeFixedInt,
+        decodeFixedInt,
+        encodeBigIntTail,
+        decodeBigIntTail,
+        encodeDecimal,
+        decodeDecimal,
+        encodeBigIntRaw,
+        decodeBigIntRaw;
+
+export 'src/rotation.dart'
+    show
+        RotationAxis,
+        Rotation,
+        rotateX,
+        rotateY,
+        rotateZ,
+        applyRotations,
+        invertRotations,
+        Vec3;
+
+export 'src/energy.dart'
+    show
+        SymbolClass,
+        facesForGlyph,
+        symbolEnergy9,
+        wordEnergy9,
+        symbolEnergyK,
+        wordEnergyK,
+        equilibriumConstant,
+        perFaceUnitEnergy;
+
+export 'src/grid.dart'
+    show
+        cube3Coords,
+        isCore,
+        isCenter,
+        isEdge,
+        isCorner,
+        facesForVec3,
+        l1,
+        linf,
+        l2;
+
+export 'src/coupler.dart'
+    show CouplerParams, couplingAt, rankTopCouplers, complexSumMagnitude;
+
+export 'src/moves.dart'
+    show Face, FaceMove, permutationFor, applyPerm, applyMoves;
+
+export 'src/potts.dart' show Potts27, cosKernel;
+export 'src/tree.dart' show CubePath, MicroCube, LivniumTree;
+export 'src/corebit.dart' show CoreBit;
+// New public exports for examples
+export 'src/generate_mapping.dart' show generateExposureMapping;
+export 'src/projection.dart' show dropAxis, radialBins, coarseGrain;
+
+// add with the others
+export 'src/arith27.dart'
+    show toDecimal, fromDecimal, add27, add27Balanced, add27Cyclic,
+    add27CarrySave3, csFinish;
+
+export 'src/validate.dart' show runAllSelfChecks;
+
+//// END FILE: lib/livnium_core.dart
+
+//// BEGIN FILE: lib/src/tree.dart
+/// Hierarchical micro-cube tree structures.
+///
+/// Provides [CubePath] for addressing, [MicroCube] for 27-ary nodes,
+/// and [LivniumTree] for managing the hierarchy.
+
+import 'alphabet.dart';
+import 'potts.dart';
+
+/// A base-27 path like "s.y.a" => [19,25,1].
+class CubePath {
+  /// Digits 0..26 per level from root to this node.
+  final List<int> digits;
+
+  const CubePath(this.digits);
+
+  /// Parse a dotted path. Empty string represents the root.
+  factory CubePath.parse(String dotted) {
+    if (dotted.isEmpty) {
+      return const CubePath([]);
+    }
+    final parts = dotted.split('.');
+    final ds = <int>[];
+    for (final part in parts) {
+      if (part.isEmpty || part.length != 1) {
+        throw FormatException('Invalid path segment "$part"');
+      }
+      final d = symbolToValue(part);
+      if (d == null) {
+        throw FormatException('Invalid symbol "$part" in path');
+      }
+      ds.add(d);
+    }
+    return CubePath(ds);
+  }
+
+  /// Create a child path by appending digit [d].
+  CubePath child(int d) => CubePath([...digits, d]);
+
+  @override
+  String toString() {
+    if (digits.isEmpty) return '';
+    return digits.map((d) => valueToSymbol(d) ?? '?').join('.');
+  }
+}
+
+/// Represents a 3×3×3 cube with optional children per position.
+///
+/// A [MicroCube] may host at most 27 children—one for each slot 0–26.
+class MicroCube {
+  /// Exactly 27 symbols for this cube.
+  final List<int> symbols;
+
+  /// Optional child cubes by position.
+  final Map<int, MicroCube> children = {};
+
+  /// Local Potts network for this cube.
+  final Potts27 potts = Potts27.cube();
+
+  /// Energy budget (currently unused numeric placeholder).
+  double energyBudget;
+
+  MicroCube({this.energyBudget = 10.125}) : symbols = List<int>.filled(27, 0);
+
+  /// Whether a child exists at [pos].
+  bool hasChild(int pos) => children.containsKey(pos);
+
+  /// Ensure a child exists at [pos], returning it.
+  ///
+  /// Only positions 0–26 are valid. Attempting to create more than 27 unique
+  /// children or using an out-of-range [pos] throws a [RangeError]. Repeated
+  /// calls for the same [pos] return the existing child.
+  MicroCube ensureChild(int pos) {
+    if (pos < 0 || pos >= 27) {
+      throw RangeError.range(pos, 0, 26, 'pos', 'Child index must be 0..26');
+    }
+    final existing = children[pos];
+    if (existing != null) return existing;
+    if (children.length >= 27) {
+      throw RangeError('MicroCube already has 27 children');
+    }
+    final child = MicroCube(energyBudget: energyBudget);
+    children[pos] = child;
+    return child;
+  }
+
+  /// Local evolution step for this cube only.
+  void stepLocal({int maxIters = 10}) {
+    for (var i = 0; i < symbols.length; i++) {
+      potts.s[i] = symbols[i];
+    }
+    potts.relax(maxIters: maxIters);
+    for (var i = 0; i < symbols.length; i++) {
+      symbols[i] = potts.s[i];
+    }
+  }
+
+  /// Aggregate child states into parent slots via majority voting.
+  void pullFromChildren() {
+    for (final entry in children.entries) {
+      final pos = entry.key;
+      final child = entry.value;
+      final counts = List<int>.filled(27, 0);
+      for (final d in child.symbols) {
+        counts[d]++;
+      }
+      var arg = 0;
+      var best = -1;
+      for (var k = 0; k < 27; k++) {
+        final c = counts[k];
+        if (c > best) {
+          best = c;
+          arg = k;
+        }
+      }
+      symbols[pos] = arg;
+    }
+  }
+
+  /// Push bias from parent digit to children.
+  void pushBiasToChildren(double beta) {
+    for (final entry in children.entries) {
+      final pos = entry.key;
+      final child = entry.value;
+      final parentDigit = symbols[pos];
+      final centerIdx = 13; // middle slot
+      final vec = List<double>.filled(Potts27.q, 0.0);
+      vec[parentDigit] = beta;
+      child.potts.setBias({centerIdx: vec});
+    }
+  }
+}
+
+/// Hierarchical tree of micro-cubes.
+class LivniumTree {
+  final MicroCube root;
+
+  LivniumTree({double energyPerNode = 10.125})
+      : root = MicroCube(energyBudget: energyPerNode);
+
+  /// Ensure node at [path] exists and return it.
+  MicroCube getOrCreate(CubePath path) {
+    var node = root;
+    for (final d in path.digits) {
+      node = node.ensureChild(d);
+    }
+    return node;
+  }
+
+  /// Set symbol at [pos] for node at [path].
+  void setSymbol(CubePath path, int pos, int digit) {
+    final node = getOrCreate(path);
+    node.symbols[pos] = digit;
+  }
+
+  /// Get symbol at [pos] for node at [path].
+  int getSymbol(CubePath path, int pos) {
+    final node = getOrCreate(path);
+    return node.symbols[pos];
+  }
+
+  /// One hierarchical evolution pass (post-order).
+  void evolve(
+      {int maxDepth = 2, double biasStrength = 0.2, int localIters = 10}) {
+    void visit(MicroCube node, int depth) {
+      if (depth >= maxDepth) return;
+      for (final child in node.children.values) {
+        visit(child, depth + 1);
+      }
+      node.pullFromChildren();
+      node.stepLocal(maxIters: localIters);
+      node.pushBiasToChildren(biasStrength);
+    }
+
+    visit(root, 0);
+  }
+}
+
+//// END FILE: lib/src/tree.dart
+
+//// BEGIN FILE: lib/src/corebit.dart
+library;
+
+import 'alphabet.dart';
+import 'potts.dart';
+import 'tree.dart';
+
+/// Wrapper for biasing the center (slot 13) of a [MicroCube].
+class CoreBit {
+  final MicroCube cube;
+  CoreBit(this.cube);
+
+  /// Bias the center toward [digit] with strength [beta].
+  void configureCenter(int digit, double beta) {
+    if (digit < 0 || digit >= Potts27.q) {
+      throw RangeError.range(digit, 0, Potts27.q - 1, 'digit');
+    }
+    final vec = List<double>.filled(Potts27.q, 0.0);
+    vec[digit] = beta;
+    cube.potts.setBias({13: vec});
+  }
+
+  /// Perform a local relaxation to observe the bias effect.
+  void relax({int maxIters = 10}) => cube.stepLocal(maxIters: maxIters);
+
+  /// Current symbol at the center slot.
+  int get centerSymbol => cube.symbols[13];
+
+  /// Convenience: center symbol as a single-character word.
+  String get centerSymbolString => valueToSymbol(centerSymbol) ?? '?';
+}
+
+//// END FILE: lib/src/corebit.dart
+
+//// BEGIN FILE: lib/src/grid.dart
+library;
+
+import 'dart:math' as math;
+import 'vec3.dart';
+
+/// Iterate all integer coords in {-1,0,1}^3 (27 points).
+Iterable<Vec3> cube3Coords() sync* {
+  for (var x = -1; x <= 1; x++) {
+    for (var y = -1; y <= 1; y++) {
+      for (var z = -1; z <= 1; z++) {
+        yield Vec3(x, y, z);
+      }
+    }
+  }
+}
+
+/// Exposure == how many axes are non-zero:
+/// 0 → core, 1 → face center, 2 → edge, 3 → corner.
+int exposure(Vec3 v) =>
+    (v.x != 0 ? 1 : 0) + (v.y != 0 ? 1 : 0) + (v.z != 0 ? 1 : 0);
+
+/// Classification helpers built off [exposure].
+bool isCore(Vec3 v) => exposure(v) == 0;
+bool isCenter(Vec3 v) => exposure(v) == 1;
+bool isEdge(Vec3 v) => exposure(v) == 2;
+bool isCorner(Vec3 v) => exposure(v) == 3;
+
+/// Backwards-compatible name: number of visible faces for that position.
+/// (Same as exposure; returns -1 only if something is off-grid.)
+int facesForVec3(Vec3 v) {
+  final e = exposure(v);
+  return (e >= 0 && e <= 3) ? e : -1;
+}
+
+/// Optional geometry helpers you’ll likely use elsewhere.
+int l1(Vec3 v) => v.x.abs() + v.y.abs() + v.z.abs(); // Manhattan
+int linf(Vec3 v) => [
+  v.x.abs(),
+  v.y.abs(),
+  v.z.abs(),
+].reduce((a, b) => a > b ? a : b); // Chebyshev
+double l2(Vec3 v) => math.sqrt((v.x * v.x + v.y * v.y + v.z * v.z).toDouble());
+
+/// Convenience: filtered lists (non-alloc heavy if you reuse results).
+List<Vec3> corePoints() => cube3Coords().where(isCore).toList();
+List<Vec3> centers() => cube3Coords().where(isCenter).toList();
+List<Vec3> edges() => cube3Coords().where(isEdge).toList();
+List<Vec3> corners() => cube3Coords().where(isCorner).toList();
+
+/// Quick invariants. Call from a demo/test to guard regressions.
+void _selfTestGrid() {
+  final pts = cube3Coords().toList();
+  print('Total points: ${pts.length}');
+  assert(pts.length == 27);
+
+  final c0 = pts.where(isCore).length;
+  final c1 = pts.where(isCenter).length;
+  final c2 = pts.where(isEdge).length;
+  final c3 = pts.where(isCorner).length;
+
+  print('Core: $c0, Centers: $c1, Edges: $c2, Corners: $c3');
+  assert(c0 == 1 && c1 == 6 && c2 == 12 && c3 == 8);
+
+  // Exposure agrees with facesForVec3 for all points.
+  for (final v in pts) {
+    final f1 = facesForVec3(v);
+    final f2 = exposure(v);
+    if (f1 != f2) {
+      print('Mismatch at $v → facesForVec3=$f1, exposure=$f2');
+    }
+    assert(f1 == f2);
+  }
+  print('Exposure mapping OK.');
+
+  // L1 shells sanity (0,1,2,3).
+  final byL1 = <int, int>{};
+  for (final v in pts) {
+    final r = l1(v);
+    byL1[r] = (byL1[r] ?? 0) + 1;
+  }
+  print('L1 shell counts: $byL1');
+  assert(byL1[0] == 1 && byL1[1] == 6 && byL1[2] == 12 && byL1[3] == 8);
+
+  print('✅ selfTestGrid passed all invariants.');
+}
+
+//// END FILE: lib/src/grid.dart
+
+//// BEGIN FILE: lib/src/energy.dart
+library;
+
+import 'alphabet.dart';
+
+/// Symbol exposure classes (how many faces a cubelet would expose)
+/// 0 → core (0 faces), 1 → face center, 2 → edge, 3 → corner.
+/// We map these to glyph ranges:
+///   '0'                → core (0)
+///   'a'..'f'  (1..6)   → centers (1)
+///   'g'..'r'  (7..18)  → edges   (2)
+///   's'..'z'  (19..26) → corners (3)
+enum SymbolClass { core, center, edge, corner }
+
+/// Internal value ranges for each class (inclusive).
+const _kCenterRange = (min: 1, max: 6);
+const _kEdgeRange = (min: 7, max: 18);
+const _kCornerRange = (min: 19, max: 26);
+
+/// Returns the exposure class for a single glyph.
+/// - '0' → 0 faces (core)
+/// - a..f → 1 face (center)
+/// - g..r → 2 faces (edge)
+/// - s..z → 3 faces (corner)
+/// Returns -1 if glyph is invalid.
+int facesForGlyph(String ch) {
+  if (ch == '0') return 0;
+  final v = symbolToValue(ch);
+  if (v == null) return -1;
+  if (v >= _kCenterRange.min && v <= _kCenterRange.max) return 1;
+  if (v >= _kEdgeRange.min && v <= _kEdgeRange.max) return 2;
+  if (v >= _kCornerRange.min && v <= _kCornerRange.max) return 3;
+  return -1;
+}
+
+/// Enum classifier (more ergonomic for switch/case).
+SymbolClass? symbolClassForGlyph(String ch) {
+  final f = facesForGlyph(ch);
+  return switch (f) {
+    0 => SymbolClass.core,
+    1 => SymbolClass.center,
+    2 => SymbolClass.edge,
+    3 => SymbolClass.corner,
+    _ => null,
+  };
+}
+
+/// Safety: is this glyph valid in our alphabet AND mapped to a class?
+bool isValidGlyph(String ch) => facesForGlyph(ch) >= 0;
+
+/// Equilibrium constant K — harmonic signature of the 3×3×3 structure.
+/// Derivation:
+///   K = 27 * (1/8 + 1/12 + 1/6) = 27 * (9/24) = 81/8 = 10.125
+/// where 8,12,6 are the multiplicities of corners/edges/centers.
+const double equilibriumConstant = 27 / 8 + 27 / 12 + 27 / 6; // 10.125
+
+/// Per-face “unit energy” per your Concentration Law:
+///   unit(faces) = 10.125 / faces   for faces ∈ {1,2,3}.
+double perFaceUnitEnergy(int faces) {
+  if (faces <= 0 || faces > 3) {
+    throw ArgumentError('faces must be 1..3');
+  }
+  return equilibriumConstant / faces;
+}
+
+/// Symbol Energy on the 9/18/27 scale.
+///   SE9 = (faces / 3) * 27
+/// So:
+///   center (1 face) →  9
+///   edge   (2 face) → 18
+///   corner (3 face) → 27
+/// core (0 face) gets 0 by definition here.
+double? symbolEnergy9(String ch) {
+  final f = facesForGlyph(ch);
+  if (f < 0) return null; // invalid glyph
+  return (f / 3.0) * 27.0;
+}
+
+/// Sum energy across a word; returns 0 if any glyph is invalid.
+double? wordEnergy9(String word) {
+  double total = 0;
+  for (final ch in word.split('')) {
+    final e = symbolEnergy9(ch);
+    if (e == null) return null;
+    total += e;
+  }
+  return total;
+}
+
+/// Symbol energy measured in units of the equilibrium constant K.
+///   core (0 faces)   → 0
+///   center (1 face)  → 1K
+///   edge   (2 faces) → 2K
+///   corner (3 faces) → 3K
+double? symbolEnergyK(String ch) {
+  final f = facesForGlyph(ch);
+  if (f <= 0) return (f == 0) ? 0.0 : null; // core=0, invalid=null
+  return equilibriumConstant * f;
+}
+
+/// Sum energy in K-units across a word; returns null if any glyph is invalid.
+double? wordEnergyK(String word) {
+  double total = 0;
+  for (final ch in word.split('')) {
+    final e = symbolEnergyK(ch);
+    if (e == null) return null;
+    total += e;
+  }
+  return total;
+}
+
+/// Optional: quick invariants + examples. Call in a demo/test target.
+void _selfTestSymbolEnergy9() {
+  // Class boundaries
+  assert(facesForGlyph('0') == 0);
+  for (final ch in ['a', 'b', 'c', 'd', 'e', 'f']) {
+    assert(facesForGlyph(ch) == 1);
+  }
+  for (final ch in [
+    'g',
+    'h',
+    'i',
+    'j',
+    'k',
+    'l',
+    'm',
+    'n',
+    'o',
+    'p',
+    'q',
+    'r',
+  ]) {
+    assert(facesForGlyph(ch) == 2);
+  }
+  for (final ch in ['s', 't', 'u', 'v', 'w', 'x', 'y', 'z']) {
+    assert(facesForGlyph(ch) == 3);
+  }
+
+  // Energies match the stated rule.
+  assert(symbolEnergy9('a') == 9.0);
+  assert(symbolEnergy9('g') == 18.0);
+  assert(symbolEnergy9('s') == 27.0);
+  assert(symbolEnergy9('0') == 0.0);
+  assert(symbolEnergy9('?') == null);
+
+  // Per-face unit energy sanity
+  assert(perFaceUnitEnergy(1) == 10.125);
+  assert(perFaceUnitEnergy(2) == 5.0625);
+  assert(perFaceUnitEnergy(3) == 3.375);
+
+  // Word energy examples
+  assert(wordEnergy9('a') == 9.0);
+  assert(wordEnergy9('ag') == 27.0); // 9 + 18
+  assert(wordEnergy9('as') == 36.0); // 9 + 27
+  assert(wordEnergy9('a?') == null);
+
+  // K-scale energy checks
+  assert(symbolEnergyK('a') == equilibriumConstant);
+  assert(symbolEnergyK('g') == equilibriumConstant * 2);
+  assert(symbolEnergyK('s') == equilibriumConstant * 3);
+  assert(symbolEnergyK('0') == 0.0);
+  assert(symbolEnergyK('?') == null);
+  assert(wordEnergyK('a') == equilibriumConstant);
+  assert(wordEnergyK('ag') == equilibriumConstant * 3);
+  assert(wordEnergyK('as') == equilibriumConstant * 4);
+  assert(wordEnergyK('a?') == null);
+}
+
+//// END FILE: lib/src/energy.dart
+
+//// BEGIN FILE: lib/src/generate_mapping.dart
+library;
+
+import 'alphabet.dart' show kSymbols;
+import 'energy.dart' show equilibriumConstant;
+
+const int _centerCount = 6; // 1 face visible
+const int _edgeCount = 12; // 2 faces visible
+const int _cornerCount = 8; // 3 faces visible
+
+/// Predefined sides for each position type (cycled)
+const List<String> _centerSides = ['+X', '-X', '+Y', '-Y', '+Z', '-Z'];
+const List<String> _edgeSides = [
+  '+X+Y',
+  '+X-Y',
+  '-X+Y',
+  '-X-Y',
+  '+X+Z',
+  '+X-Z',
+  '-X+Z',
+  '-X-Z',
+  '+Y+Z',
+  '+Y-Z',
+  '-Y+Z',
+  '-Y-Z',
+];
+const List<String> _cornerSides = [
+  '+X+Y+Z',
+  '+X+Y-Z',
+  '+X-Y+Z',
+  '+X-Y-Z',
+  '-X+Y+Z',
+  '-X+Y-Z',
+  '-X-Y+Z',
+  '-X-Y-Z',
+];
+
+/// Generate the mapping: symbol → (faces, side).
+Map<String, (int faces, String side)> generateExposureMapping({
+  String mode = 'conventional',
+}) {
+  return switch (mode) {
+    'harmonic' => _generateHarmonic(),
+    'conventional' => _generateConventional(),
+    _ => throw ArgumentError('Unknown mode: $mode'),
+  };
+}
+
+/// ---------------------- Conventional (grouped) ---------------------------
+Map<String, (int faces, String side)> _generateConventional() {
+  final m = <String, (int, String)>{};
+  m[kSymbols[0]] = (0, 'CORE');
+
+  // a..f → centers
+  for (int i = 0; i < _centerCount; i++) {
+    final sym = kSymbols[1 + i];
+    m[sym] = (1, _centerSides[i % _centerSides.length]);
+  }
+  // g..r → edges (12)
+  for (int i = 0; i < _edgeCount; i++) {
+    final sym = kSymbols[1 + _centerCount + i];
+    m[sym] = (2, _edgeSides[i % _edgeSides.length]);
+  }
+  // s..z → corners (8)
+  for (int i = 0; i < _cornerCount; i++) {
+    final sym = kSymbols[1 + _centerCount + _edgeCount + i];
+    m[sym] = (3, _cornerSides[i % _cornerSides.length]);
+  }
+  return m;
+}
+
+/// ----------------------- Harmonic (interleaved) --------------------------
+int _tiePriorityForFaces(int faces) => switch (faces) {
+  1 => 0,
+  2 => 1,
+  3 => 2,
+  _ => 99,
+};
+
+Map<String, (int faces, String side)> _generateHarmonic() {
+  final stepCorner = equilibriumConstant / _cornerCount;
+  final stepEdge = equilibriumConstant / _edgeCount;
+  final stepCenter = equilibriumConstant / _centerCount;
+
+  final queue = <_Entry>[
+    _Entry(
+      step: stepCorner,
+      faces: 3,
+      remaining: _cornerCount,
+      sideList: _cornerSides,
+    ),
+    _Entry(
+      step: stepEdge,
+      faces: 2,
+      remaining: _edgeCount,
+      sideList: _edgeSides,
+    ),
+    _Entry(
+      step: stepCenter,
+      faces: 1,
+      remaining: _centerCount,
+      sideList: _centerSides,
+    ),
+  ];
+
+  final mapping = <String, (int faces, String side)>{};
+  mapping[kSymbols[0]] = (0, 'CORE');
+
+  var idx = 1;
+  while (queue.any((e) => e.remaining > 0)) {
+    queue.sort((a, b) {
+      final t = a.nextTime.compareTo(b.nextTime);
+      if (t != 0) return t;
+      final pa = _tiePriorityForFaces(a.faces);
+      final pb = _tiePriorityForFaces(b.faces);
+      if (pa != pb) return pa - pb;
+      return a.faces - b.faces;
+    });
+    final cur = queue.first;
+    final side = cur.sideList[(cur.sideIndex++ % cur.sideList.length)];
+    mapping[kSymbols[idx++]] = (cur.faces, side);
+    cur.remaining--;
+    cur.nextTime += cur.step;
+  }
+  return mapping;
+}
+
+class _Entry {
+  final double step;
+  final int faces;
+  int remaining;
+  double nextTime;
+  final List<String> sideList;
+  int sideIndex = 0;
+  _Entry({
+    required this.step,
+    required this.faces,
+    required this.remaining,
+    required this.sideList,
+  }) : nextTime = 0;
+}
+
+/// Basic invariants for the conventional mapping.
+void _selfTestConventionalMapping(Map<String, (int faces, String side)> m) {
+  int c1 = 0, c2 = 0, c3 = 0;
+  for (final e in m.entries) {
+    final s = e.key;
+    final f = e.value.$1;
+    if (s == '0') {
+      assert(f == 0);
+      continue;
+    }
+    if (f == 1) {
+      c1++;
+    } else if (f == 2) {
+      c2++;
+    } else if (f == 3) {
+      c3++;
+    } else {
+      assert(false);
+    }
+  }
+  assert(c1 == 6 && c2 == 12 && c3 == 8);
+
+  // Exact symbol ranges
+  for (final s in ['a', 'b', 'c', 'd', 'e', 'f']) {
+    assert(m[s]!.$1 == 1);
+  }
+  for (final s in [
+    'g',
+    'h',
+    'i',
+    'j',
+    'k',
+    'l',
+    'm',
+    'n',
+    'o',
+    'p',
+    'q',
+    'r',
+  ]) {
+    assert(m[s]!.$1 == 2);
+  }
+  for (final s in ['s', 't', 'u', 'v', 'w', 'x', 'y', 'z']) {
+    assert(m[s]!.$1 == 3);
+  }
+
+  // Side sets uniqueness
+  final sides1 = <String>{}, sides2 = <String>{}, sides3 = <String>{};
+  m.forEach((sym, v) {
+    switch (v.$1) {
+      case 1:
+        assert(sides1.add(v.$2));
+        break;
+      case 2:
+        assert(sides2.add(v.$2));
+        break;
+      case 3:
+        assert(sides3.add(v.$2));
+        break;
+    }
+  });
+  assert(sides1.length == 6 && sides2.length == 12 && sides3.length == 8);
+}
+
+//// END FILE: lib/src/generate_mapping.dart
+
+//// BEGIN FILE: lib/src/validate.dart
+library;
+
+import 'alphabet.dart';
+import 'codec.dart';
+import 'grid.dart';
+import 'rotation.dart';
+import 'energy.dart';
+
+bool _runAllSelfChecks() {
+  // alphabet round-trip
+  const samples = ['', '0', 'abc', 'z', '0az', 'livnium'];
+  for (final w in samples) {
+    final ds = stringToDigits(w);
+    if (ds == null) return false;
+    final back = digitsToString(ds);
+    if (back != w) return false;
+  }
+
+  // codecs
+  for (final w in samples) {
+    if (decodeCsv(encodeCsv(w)!) != w) return false;
+    if (decodeFixed(encodeFixed(w)!) != w) return false;
+    final big = encodeBigIntTail(w);
+    if (big == null || decodeBigIntTail(big) != w) return false;
+  }
+
+  // rotation identities
+  for (final v in cube3Coords()) {
+    var p = v;
+    for (var i = 0; i < 4; i++) {
+      p = rotateX(p);
+    }
+    if (p != v) return false;
+    p = v;
+    for (var i = 0; i < 4; i++) {
+      p = rotateY(p);
+    }
+    if (p != v) return false;
+    p = v;
+    for (var i = 0; i < 4; i++) {
+      p = rotateZ(p);
+    }
+    if (p != v) return false;
+  }
+
+  // sequence + inverse
+  final seq = [Rotation(RotationAxis.x, 1), Rotation(RotationAxis.z, 3)];
+  final inv = invertRotations(seq);
+  for (final v in cube3Coords()) {
+    final w = applyRotations(v, seq);
+    final back = applyRotations(w, inv);
+    if (back != v) return false;
+  }
+
+  // grid class counts: 1 core, 6 centers, 12 edges, 8 corners
+  var core = 0, cent = 0, edge = 0, corn = 0;
+  for (final v in cube3Coords()) {
+    if (isCore(v))
+      core++;
+    else if (isCenter(v))
+      cent++;
+    else if (isEdge(v))
+      edge++;
+    else if (isCorner(v))
+      corn++;
+  }
+  if (!(core == 1 && cent == 6 && edge == 12 && corn == 8)) return false;
+
+  // energy basics
+  if (equilibriumConstant != 10.125) return false;
+  if (perFaceUnitEnergy(1) != 10.125) return false;
+  if (perFaceUnitEnergy(2) != 5.0625) return false;
+  if (perFaceUnitEnergy(3) != 3.375) return false;
+
+  return true;
+}
+
+// Public wrapper for CLI/tests
+bool runAllSelfChecks() => _runAllSelfChecks();
+
+
+//// END FILE: lib/src/validate.dart
+
+//// BEGIN FILE: lib/src/projection.dart
+library;
+
+import 'grid.dart';
+import 'vec3.dart';
+
+/// Group points by dropping one axis. Key is a Dart record of the kept coords.
+Map<(int, int), List<Vec3>> dropAxis(String axis) {
+  final out = <(int, int), List<Vec3>>{};
+  for (final v in cube3Coords()) {
+    late (int, int) key;
+    switch (axis) {
+      case 'x':
+        key = (v.y, v.z);
+        break;
+      case 'y':
+        key = (v.x, v.z);
+        break;
+      case 'z':
+        key = (v.x, v.y);
+        break;
+      default:
+        throw ArgumentError("axis must be 'x'|'y'|'z'");
+    }
+    (out[key] ??= <Vec3>[]).add(v);
+  }
+  return out;
+}
+
+/// Radial bins by L1 distance from core: 0..3
+Map<int, List<Vec3>> radialBins() {
+  final out = <int, List<Vec3>>{};
+  for (final v in cube3Coords()) {
+    final L = v.x.abs() + v.y.abs() + v.z.abs();
+    (out[L] ??= <Vec3>[]).add(v);
+  }
+  return out;
+}
+
+/// Coarse grain: group by arbitrary key function
+Map<K, List<Vec3>> coarseGrain<K>(K Function(Vec3) keyFn) {
+  final out = <K, List<Vec3>>{};
+  for (final v in cube3Coords()) {
+    final k = keyFn(v);
+    (out[k] ??= <Vec3>[]).add(v);
+  }
+  return out;
+}
+
+
+
+//// END FILE: lib/src/projection.dart
+
+//// BEGIN FILE: lib/src/alphabet.dart
+
+library;
+
+/// Livnium alphabet — a custom base-27 numbering system.
+///
+/// Why base-27?
+/// - We encode data using **27 unique symbols** for compact storage and
+///   spatial mapping.
+/// - Symbols: `'0' → 0`, `'a' → 1`, …, `'z' → 26`.
+///
+/// This mapping is *bijective*: each symbol maps to exactly one number,
+/// and vice-versa.
+
+const int kRadix = 27; // 0..26
+
+/// Fast digit→glyph table (index = digit). Publicly exported as [kSymbols].
+const List<String> _kDigitToSymbol = [
+  '0',
+  'a',
+  'b',
+  'c',
+  'd',
+  'e',
+  'f',
+  'g',
+  'h',
+  'i',
+  'j',
+  'k',
+  'l',
+  'm',
+  'n',
+  'o',
+  'p',
+  'q',
+  'r',
+  's',
+  't',
+  'u',
+  'v',
+  'w',
+  'x',
+  'y',
+  'z'
+];
+
+/// Public view used across the library. Single source of truth.
+const List<String> kSymbols = _kDigitToSymbol;
+
+// Symbol→digit map (kept private; public API uses helpers below)
+const Map<String, int> _symbolToValue = {
+  '0': 0,
+  'a': 1,
+  'b': 2,
+  'c': 3,
+  'd': 4,
+  'e': 5,
+  'f': 6,
+  'g': 7,
+  'h': 8,
+  'i': 9,
+  'j': 10,
+  'k': 11,
+  'l': 12,
+  'm': 13,
+  'n': 14,
+  'o': 15,
+  'p': 16,
+  'q': 17,
+  'r': 18,
+  's': 19,
+  't': 20,
+  'u': 21,
+  'v': 22,
+  'w': 23,
+  'x': 24,
+  'y': 25,
+  'z': 26,
+};
+
+/// Convert one glyph (e.g. `'c'`) to its digit (e.g. `3`).
+/// Returns `null` if `ch` is not exactly one of: `0` or `a`..`z`.
+int? symbolToValue(String ch) {
+  if (ch.length != 1) return null;
+  return _symbolToValue[ch];
+}
+
+/// Convert one digit (0..26) back to its glyph (`'0'`..`'z'`).
+/// Returns `null` if `v` is outside 0..26.
+String? valueToSymbol(int v) {
+  if (v < 0 || v >= kRadix) return null;
+  return _kDigitToSymbol[v];
+}
+
+/// Convert a whole word to base-27 digits.
+/// Example: `"cat"` → `[3, 1, 20]`.
+/// Returns `null` if any character is invalid.
+List<int>? stringToDigits(String text) {
+  final out = List<int>.filled(text.length, 0, growable: false);
+  for (var i = 0; i < text.length; i++) {
+    final v = symbolToValue(text[i]);
+    if (v == null) return null;
+    out[i] = v;
+  }
+  return out;
+}
+
+/// Convert base-27 digits back to a word.
+/// Example: `[3, 1, 20]` → `"cat"`.
+/// Returns `null` if any digit is outside 0..26.
+String? digitsToString(List<int> digits) {
+  final b = StringBuffer();
+  for (final d in digits) {
+    if (d < 0 || d >= kRadix) return null;
+    b.write(_kDigitToSymbol[d]);
+  }
+  return b.toString();
+}
+
+/// Returns `true` iff every character in [text] is a valid Livnium glyph.
+/// Empty string is considered valid.
+bool isValidWord(String text) => stringToDigits(text) != null;
+
+//// END FILE: lib/src/alphabet.dart
+
+//// BEGIN FILE: lib/src/potts.dart
+library;
+
+import 'dart:math' as math;
+
+import 'grid.dart';
+import 'coupler.dart';
+
+typedef SimilarityKernel = double Function(int k, int l);
+
+double cosKernel(int k, int l) {
+  const twoPiOver27 = 2 * math.pi / 27.0;
+  final d = (k - l);
+  return math.cos(twoPiOver27 * d);
+}
+
+/// Simple Potts-Hopfield network with 27 possible symbols per node.
+class Potts27 {
+  /// Number of possible symbols per node.
+  static const int q = 27;
+
+  /// Number of nodes in the network.
+  final int n;
+
+  /// Adjacency list: neighbors for each node.
+  final List<List<int>> nbrs;
+
+  /// Coupler weights: W[i][j][k*q + l] represents interaction between
+  /// node i in state k and neighbor j in state l.
+  final List<List<List<double>>> w;
+
+  /// Local biases for each node/state.
+  final List<List<double>> b;
+
+  /// Current state (symbol index 0..26) for each node.
+  final List<int> s;
+
+  Potts27(this.n, this.nbrs)
+    : w = List.generate(
+        n,
+        (_) => List.generate(n, (_) => List.filled(q * q, 0.0)),
+      ),
+      b = List.generate(n, (_) => List.filled(q, 0.0)),
+      s = List.filled(n, 0);
+
+  /// Factory that builds a 3×3×3 cube (27 nodes) with 6-neighborhoods.
+  factory Potts27.cube() {
+    final coords = cube3Coords().toList();
+    final n = coords.length;
+    final nbrs = List.generate(n, (_) => <int>[]);
+    for (var i = 0; i < n; i++) {
+      for (var j = 0; j < n; j++) {
+        if (i == j) continue;
+        final d = coords[i].sub(coords[j]);
+        final manhattan = d.x.abs() + d.y.abs() + d.z.abs();
+        if (manhattan == 1) nbrs[i].add(j);
+      }
+    }
+    return Potts27(n, nbrs);
+  }
+
+  void buildFromCouplers({
+    required CouplerParams params,
+    required SimilarityKernel kernel,
+    required double targetNorm,
+    double geoMix = 1.0,
+  }) {
+    for (var i = 0; i < n; i++) {
+      for (final j in nbrs[i]) {
+        final wij = w[i][j];
+        for (var t = 0; t < wij.length; t++) {
+          wij[t] = 0.0;
+        }
+      }
+    }
+
+    final coords = cube3Coords().toList();
+    for (var i = 0; i < n; i++) {
+      for (final j in nbrs[i]) {
+        final gi = couplingAt(coords[i], params);
+        final gj = couplingAt(coords[j], params);
+        final G = geoMix * (gi < gj ? gi : gj);
+
+        final wij = w[i][j];
+        for (var k = 0; k < Potts27.q; k++) {
+          for (var l = 0; l < Potts27.q; l++) {
+            wij[k * Potts27.q + l] = G * kernel(k, l);
+          }
+        }
+      }
+    }
+
+    for (var i = 0; i < n; i++) {
+      for (final j in nbrs[i]) {
+        final wij = w[i][j];
+        final wji = w[j][i];
+        for (var k = 0; k < Potts27.q; k++) {
+          for (var l = 0; l < Potts27.q; l++) {
+            wji[l * Potts27.q + k] = wij[k * Potts27.q + l];
+          }
+        }
+      }
+    }
+
+    for (var i = 0; i < n; i++) {
+      for (final j in nbrs[i]) {
+        final wij = w[i][j];
+        var norm2 = 0.0;
+        for (final v in wij) {
+          norm2 += v * v;
+        }
+        final norm = norm2 > 0 ? math.sqrt(norm2) : 0.0;
+        final s = norm > 0 ? (targetNorm / norm) : 1.0;
+        for (var t = 0; t < wij.length; t++) {
+          wij[t] *= s;
+        }
+      }
+    }
+  }
+
+  /// Hebbian storage of [patterns]. Each pattern is a list of length [n]
+  /// with digits 0..26. After building Hebbian weights, they are symmetrized,
+  /// scaled to [targetNorm], then blended with existing weights.
+  void store(
+    List<List<int>> patterns, {
+    double scale = 0.3,
+    double targetNorm = 0.4,
+    double blend = 0.5,
+  }) {
+    final invN = scale / n;
+    final wHebb = List.generate(
+      n,
+      (_) => List.generate(n, (_) => List.filled(q * q, 0.0)),
+    );
+    for (final p in patterns) {
+      if (p.length != n) {
+        throw ArgumentError('Pattern length ${p.length} != n=$n');
+      }
+      for (var i = 0; i < n; i++) {
+        for (final j in nbrs[i]) {
+          // Subtract baseline 1/q from all entries.
+          final base = invN / q;
+          final wij = wHebb[i][j];
+          for (var idx = 0; idx < wij.length; idx++) {
+            wij[idx] -= base;
+          }
+          // Add correlation for observed pair.
+          final idx = p[i] * q + p[j];
+          wij[idx] += invN;
+        }
+      }
+    }
+
+    // Symmetrize Hebbian weights.
+    for (var i = 0; i < n; i++) {
+      for (final j in nbrs[i]) {
+        final wij = wHebb[i][j];
+        final wji = wHebb[j][i];
+        for (var k = 0; k < q; k++) {
+          for (var l = 0; l < q; l++) {
+            wji[l * q + k] = wij[k * q + l];
+          }
+        }
+      }
+    }
+
+    // Scale each block to targetNorm.
+    for (var i = 0; i < n; i++) {
+      for (final j in nbrs[i]) {
+        final wij = wHebb[i][j];
+        var norm2 = 0.0;
+        for (final v in wij) {
+          norm2 += v * v;
+        }
+        final norm = norm2 > 0 ? math.sqrt(norm2) : 0.0;
+        final s = norm > 0 ? (targetNorm / norm) : 1.0;
+        for (var t = 0; t < wij.length; t++) {
+          wij[t] *= s;
+        }
+      }
+    }
+
+    // Blend with existing weights.
+    for (var i = 0; i < n; i++) {
+      for (final j in nbrs[i]) {
+        final wij = w[i][j];
+        final hebb = wHebb[i][j];
+        for (var t = 0; t < wij.length; t++) {
+          wij[t] = (1 - blend) * wij[t] + blend * hebb[t];
+        }
+      }
+    }
+  }
+
+  /// Set bias vectors for specific nodes.
+  void setBias(Map<int, List<double>> biasByNode) {
+    biasByNode.forEach((i, vec) {
+      if (i < 0 || i >= n) return;
+      if (vec.length != q) {
+        throw ArgumentError('Bias vector length must be $q');
+      }
+      for (var k = 0; k < q; k++) {
+        b[i][k] = vec[k];
+      }
+    });
+  }
+
+  /// Perform one asynchronous sweep. Returns `true` if any state changed.
+  bool stepOnce() {
+    var changed = false;
+    for (var i = 0; i < n; i++) {
+      final field = List<double>.from(b[i]);
+      for (final j in nbrs[i]) {
+        final sj = s[j];
+        final wij = w[i][j];
+        for (var k = 0; k < q; k++) {
+          field[k] += wij[k * q + sj];
+        }
+      }
+      var bestK = 0;
+      var bestV = field[0];
+      for (var k = 1; k < q; k++) {
+        final v = field[k];
+        if (v > bestV) {
+          bestV = v;
+          bestK = k;
+        }
+      }
+      if (bestK != s[i]) {
+        s[i] = bestK;
+        changed = true;
+      }
+    }
+    return changed;
+  }
+
+  /// Repeatedly call [stepOnce] until no changes or [maxIters] reached.
+  void relax({int maxIters = 50}) {
+    for (var t = 0; t < maxIters; t++) {
+      if (!stepOnce()) break;
+    }
+  }
+}
+
+//// END FILE: lib/src/potts.dart
+
+//// BEGIN FILE: lib/src/rotation.dart
+library;
+
+import 'vec3.dart';
+export 'vec3.dart' show Vec3;
+
+/// Right-hand-rule quarter turns. +90° around an axis follows the RH convention.
+enum RotationAxis { x, y, z }
+
+class Rotation {
+  final RotationAxis axis;
+
+  /// quarterTurns: ±1, ±2, ±3 (mod 4)
+  final int quarterTurns;
+  const Rotation(this.axis, this.quarterTurns);
+}
+
+Vec3 rotateX(Vec3 v) => Vec3(v.x, -v.z, v.y);
+Vec3 rotateY(Vec3 v) => Vec3(v.z, v.y, -v.x);
+
+/// Right-hand rule, +90°: (x, y, z) -> (-y, x, z)
+Vec3 rotateZ(Vec3 v) => Vec3(-v.y, v.x, v.z);
+
+Vec3 _applyOnce(Vec3 v, RotationAxis a) {
+  switch (a) {
+    case RotationAxis.x:
+      return rotateX(v);
+    case RotationAxis.y:
+      return rotateY(v);
+    case RotationAxis.z:
+      return rotateZ(v);
+  }
+}
+
+Vec3 applyRotations(Vec3 v, List<Rotation> seq) {
+  var p = v;
+  for (final r in seq) {
+    final t = ((r.quarterTurns % 4) + 4) % 4;
+    for (var i = 0; i < t; i++) {
+      p = _applyOnce(p, r.axis);
+    }
+  }
+  return p;
+}
+
+List<Rotation> invertRotations(List<Rotation> seq) => seq.reversed
+    .map((r) => Rotation(r.axis, -r.quarterTurns))
+    .toList(growable: false);
+
+//// END FILE: lib/src/rotation.dart
+
+//// BEGIN FILE: lib/src/moves.dart
+library;
+
+import 'grid.dart';
+import 'rotation.dart';
+import 'vec3.dart';
+
+/// Faces of the 3x3x3 cube using standard Rubik notation.
+enum Face { U, D, L, R, F, B }
+
+/// Represents a quarter-turn move on a face.
+class FaceMove {
+  final Face face;
+  final int quarterTurns; // \pm1,\pm2,\pm3
+  const FaceMove(this.face, this.quarterTurns);
+}
+
+// Pre-computed coordinate list and reverse lookup.
+final List<Vec3> _coords = cube3Coords().toList(growable: false);
+final Map<Vec3, int> _coordIndex = {
+  for (var i = 0; i < _coords.length; i++) _coords[i]: i,
+};
+
+/// Return a 27-long permutation mapping oldIndex -> newIndex for this move.
+List<int> permutationFor(FaceMove m) {
+  final perm = List<int>.generate(_coords.length, (i) => i);
+  final t = ((m.quarterTurns % 4) + 4) % 4;
+  if (t == 0) return perm;
+
+  bool Function(Vec3) select;
+  Vec3 Function(Vec3) rot;
+
+  switch (m.face) {
+    case Face.U:
+      select = (v) => v.z == 1;
+      rot = rotateZ;
+      break;
+    case Face.D:
+      select = (v) => v.z == -1;
+      rot = rotateZ;
+      break;
+    case Face.R:
+      select = (v) => v.x == 1;
+      rot = rotateX;
+      break;
+    case Face.L:
+      select = (v) => v.x == -1;
+      rot = rotateX;
+      break;
+    case Face.F:
+      select = (v) => v.y == 1;
+      rot = rotateY;
+      break;
+    case Face.B:
+      select = (v) => v.y == -1;
+      rot = rotateY;
+      break;
+  }
+
+  for (var i = 0; i < _coords.length; i++) {
+    final v = _coords[i];
+    if (select(v)) {
+      var p = v;
+      for (var k = 0; k < t; k++) {
+        p = rot(p);
+      }
+      final j = _coordIndex[p]!;
+      perm[i] = j;
+    }
+  }
+  return perm;
+}
+
+/// Apply a permutation to a symbol array (in-place).
+void applyPerm<T>(List<T> symbols, List<int> perm) {
+  if (symbols.length != perm.length) {
+    throw ArgumentError('symbols and perm must have same length');
+  }
+  final tmp = List<T>.from(symbols);
+  for (var i = 0; i < perm.length; i++) {
+    symbols[perm[i]] = tmp[i];
+  }
+}
+
+/// Convenience: apply a sequence of face moves.
+void applyMoves(List<int> symbols, List<FaceMove> seq) {
+  for (final m in seq) {
+    final perm = permutationFor(m);
+    applyPerm<int>(symbols, perm);
+  }
+}
+
+//// END FILE: lib/src/moves.dart
+
+//// BEGIN FILE: lib/src/coupler.dart
+library;
+
+import 'dart:math';
+import 'grid.dart'; // facesForVec3, cube3Coords, l1()
+import 'vec3.dart';
+import 'energy.dart' show equilibriumConstant;
+
+/// Tunable parameters for the coupling model.
+class CouplerParams {
+  /// Overall amplitude (acts like a gain knob).
+  final double tau0;
+
+  /// Path-loss exponent applied to the L1 distance.
+  /// alpha = 1 → 1/L
+  /// alpha = 2 → 1/L^2, etc.
+  final double alpha;
+
+  const CouplerParams({this.tau0 = 1.0, this.alpha = 1.0});
+}
+
+/// Coupling magnitude for a position v under parameters p.
+///
+/// Formula:
+///   C(v) = tau0 * (10.125 / faces(v)) / (L1(v))^alpha
+///
+/// Where:
+///   - 10.125 is your equilibrium constant (corner + edge + face terms).
+///   - faces(v) is exposure count: 3 for corners, 2 for edges, 1 for face centers,
+///     0 only for the core (which we exclude).
+///   - L1(v) is the Manhattan distance from core.
+///   - alpha controls how fast the signal decays with distance.
+///
+/// Notes:
+///   - Core is excluded (returns 0.0) since faces = 0.
+///   - We guard L=0 to avoid division by zero (though faces==0 case early-returns).
+double couplingAt(Vec3 v, CouplerParams p) {
+  final faces = facesForVec3(v); // 3,2,1 for non-core; 0 for core
+  if (faces <= 0) return 0.0; // no coupling defined for the core
+  final L = l1(v); // 1..3 for the 26 non-core points
+  final base = equilibriumConstant / faces; // exposure weighting
+  final loss = pow(L.toDouble(), p.alpha); // path-loss
+  return p.tau0 * base / (loss == 0 ? 1.0 : loss);
+}
+
+/// Rank top-N non-core couplers by descending coupling magnitude.
+/// Returns records with:
+///   - pos   : grid coordinate
+///   - C     : coupling magnitude
+///   - L     : L1 distance
+///   - faces : exposure class (3/2/1)
+List<({Vec3 pos, double C, int L, int faces})> rankTopCouplers(
+  CouplerParams p,
+  int topN,
+) {
+  final items = <({Vec3 pos, double C, int L, int faces})>[];
+
+  for (final v in cube3Coords()) {
+    if (v == const Vec3(0, 0, 0)) continue; // skip core
+    final faces = facesForVec3(v);
+    if (faces <= 0) continue; // defensive
+    final L = l1(v);
+    final C = couplingAt(v, p);
+    items.add((pos: v, C: C, L: L, faces: faces));
+  }
+
+  // Sort by magnitude descending. If you want stable ordering among ties,
+  // add a tiebreaker (e.g., L ascending, faces descending, lexicographic pos).
+  items.sort((a, b) => b.C.compareTo(a.C));
+
+  return items.take(topN).toList(growable: false);
+}
+
+/// Sum a set of phasors given in polar form (magnitude, phase in degrees),
+/// and return the magnitude of the resultant vector.
+/// Useful to see interference/constructive addition across positions.
+double complexSumMagnitude(List<(double mag, double phaseDeg)> terms) {
+  double xr = 0, xi = 0;
+  for (final t in terms) {
+    final rad = t.$2 * pi / 180.0;
+    xr += t.$1 * cos(rad);
+    xi += t.$1 * sin(rad);
+  }
+  return sqrt(xr * xr + xi * xi);
+}
+
+//// END FILE: lib/src/coupler.dart
+
+//// BEGIN FILE: lib/src/vec3.dart
+library;
+
+class Vec3 {
+  final int x, y, z;
+  const Vec3(this.x, this.y, this.z);
+
+  Vec3 add(Vec3 o) => Vec3(x + o.x, y + o.y, z + o.z);
+  Vec3 sub(Vec3 o) => Vec3(x - o.x, y - o.y, z - o.z);
+  int dot(Vec3 o) => x * o.x + y * o.y + z * o.z;
+
+  @override
+  String toString() => '($x,$y,$z)';
+
+  @override
+  bool operator ==(Object other) =>
+      other is Vec3 && x == other.x && y == other.y && z == other.z;
+
+  @override
+  int get hashCode => Object.hash(x, y, z);
+}
+
+//// END FILE: lib/src/vec3.dart
+
+//// BEGIN FILE: lib/src/arith27.dart
+library;
+
+import 'alphabet.dart';
+
+const int _R = 27;
+
+int? _d(String ch) => symbolToValue(ch);
+String? _g(int v) => valueToSymbol(v);
+
+/// Whether [s] consists solely of valid base-27 symbols.
+///
+/// The empty string is permitted and treated as representing zero.
+bool _valid(String s) => s.split('').every((c) => _d(c) != null);
+
+String _stripLeadingZeros(String s) {
+  var i = 0;
+  while (i < s.length - 1 && s.codeUnitAt(i) == '0'.codeUnitAt(0)) {
+    i++;
+  }
+  return s.substring(i);
+}
+
+/// Convert a Livnium base-27 word to [BigInt].
+///
+/// An empty string is interpreted as zero.
+BigInt? toDecimal(String s) {
+  if (!_valid(s)) return null;
+  if (s.isEmpty) return BigInt.zero;
+  var acc = BigInt.zero;
+  for (final ch in s.split('')) {
+    final dv = _d(ch)!;
+    acc = acc * BigInt.from(_R) + BigInt.from(dv);
+  }
+  return acc;
+}
+
+/// Convert a non-negative [BigInt] to a Livnium base-27 word.
+String? fromDecimal(BigInt n) {
+  if (n.isNegative) return null;
+  if (n == BigInt.zero) return '0';
+  final r = BigInt.from(_R);
+  final digits = <int>[];
+  var m = n;
+  while (m > BigInt.zero) {
+    final rem = (m % r).toInt();
+    digits.add(rem);
+    m = m ~/ r;
+  }
+  final buf = StringBuffer();
+  for (var i = digits.length - 1; i >= 0; i--) {
+    final ch = _g(digits[i]);
+    if (ch == null) return null; // defensive
+    buf.write(ch);
+  }
+  return _stripLeadingZeros(buf.toString());
+}
+
+/// Standard base-27 addition with carries.
+///
+/// Empty strings are treated as zero. Returns `null` if either input contains
+/// an invalid symbol.
+String? add27(String a, String b) {
+  if (!_valid(a) || !_valid(b)) return null;
+  if (a.isEmpty && b.isEmpty) return '0';
+  if (a.isEmpty) {
+    return _stripLeadingZeros(b).isEmpty ? '0' : _stripLeadingZeros(b);
+  }
+  if (b.isEmpty) {
+    return _stripLeadingZeros(a).isEmpty ? '0' : _stripLeadingZeros(a);
+  }
+  int i = a.length - 1, j = b.length - 1, carry = 0;
+  final out = StringBuffer();
+
+  while (i >= 0 || j >= 0 || carry != 0) {
+    final da = (i >= 0) ? _d(a[i--])! : 0;
+    final db = (j >= 0) ? _d(b[j--])! : 0;
+    var s = da + db + carry;
+    carry = s ~/ _R;
+    s %= _R;
+    final ch = _g(s);
+    if (ch == null) return null;
+    out.write(ch);
+  }
+
+  final res = out.toString().split('').reversed.join();
+  final stripped = _stripLeadingZeros(res);
+  return stripped.isEmpty ? '0' : stripped;
+}
+
+/// Balanced-carry addition using centered digits −13‥+13.
+///
+/// The result matches [add27] but carries are propagated symmetrically so that
+/// each intermediate digit stays near the center value 13. Empty strings are
+/// treated as zero.
+String? add27Balanced(String a, String b) {
+  if (!_valid(a) || !_valid(b)) return null;
+  if (a.isEmpty && b.isEmpty) return '0';
+  if (a.isEmpty) {
+    return _stripLeadingZeros(b).isEmpty ? '0' : _stripLeadingZeros(b);
+  }
+  if (b.isEmpty) {
+    return _stripLeadingZeros(a).isEmpty ? '0' : _stripLeadingZeros(a);
+  }
+
+  int i = a.length - 1, j = b.length - 1, carry = 0;
+  final out = StringBuffer();
+  while (i >= 0 || j >= 0 || carry != 0) {
+    final da = (i >= 0) ? _d(a[i--])! : 0;
+    final db = (j >= 0) ? _d(b[j--])! : 0;
+    var s = da + db + carry - 13; // center around zero
+    if (s > 13) {
+      s -= 27;
+      carry = 1;
+    } else if (s < -13) {
+      s += 27;
+      carry = -1;
+    } else {
+      carry = 0;
+    }
+    final digit = s + 13;
+    final ch = _g(digit);
+    if (ch == null) return null;
+    out.write(ch);
+  }
+  final res = out.toString().split('').reversed.join();
+  final stripped = _stripLeadingZeros(res);
+  return stripped.isEmpty ? '0' : stripped;
+}
+
+/// Per-digit modulo-27 addition without carry propagation.
+///
+/// The shorter operand is treated as being left-padded with zeros. Empty
+/// strings are interpreted as zero.
+String? add27Cyclic(String a, String b) {
+  if (!_valid(a) || !_valid(b)) return null;
+  if (a.isEmpty && b.isEmpty) return '0';
+  if (a.isEmpty) {
+    return _stripLeadingZeros(b).isEmpty ? '0' : _stripLeadingZeros(b);
+  }
+  if (b.isEmpty) {
+    return _stripLeadingZeros(a).isEmpty ? '0' : _stripLeadingZeros(a);
+  }
+  int i = a.length - 1, j = b.length - 1;
+  final out = StringBuffer();
+  while (i >= 0 || j >= 0) {
+    final da = (i >= 0) ? _d(a[i--])! : 0;
+    final db = (j >= 0) ? _d(b[j--])! : 0;
+    final s = (da + db) % _R;
+    final ch = _g(s);
+    if (ch == null) return null;
+    out.write(ch);
+  }
+  final res = out.toString().split('').reversed.join();
+  final stripped = _stripLeadingZeros(res);
+  return stripped.isEmpty ? '0' : stripped;
+}
+
+/// Carry-save addition of three operands. Returns partial sum and carry.
+///
+/// Empty operands are treated as zero. The returned tuple's fields are both
+/// normalized base-27 words.
+({String sum, String carry})? add27CarrySave3(String a, String b, String c) {
+  if (!_valid(a) || !_valid(b) || !_valid(c)) return null;
+  if (a.isEmpty && b.isEmpty && c.isEmpty) {
+    return (sum: '0', carry: '0');
+  }
+  int i = a.length - 1, j = b.length - 1, k = c.length - 1;
+  final sumBuf = StringBuffer();
+  final carryBuf = StringBuffer();
+  while (i >= 0 || j >= 0 || k >= 0) {
+    final da = (i >= 0) ? _d(a[i--])! : 0;
+    final db = (j >= 0) ? _d(b[j--])! : 0;
+    final dc = (k >= 0) ? _d(c[k--])! : 0;
+    final total = da + db + dc;
+    final digit = total % _R;
+    final carry = total ~/ _R;
+    sumBuf.write(_g(digit)!);
+    carryBuf.write(_g(carry)!);
+  }
+  final sumStr =
+      _stripLeadingZeros(sumBuf.toString().split('').reversed.join());
+  final carryStr =
+      _stripLeadingZeros(carryBuf.toString().split('').reversed.join());
+  return (
+    sum: sumStr.isEmpty ? '0' : sumStr,
+    carry: carryStr.isEmpty ? '0' : carryStr,
+  );
+}
+
+/// Finalize a carry-save addition produced by [add27CarrySave3].
+///
+/// Computes `sum + (carry << 1 digit)` in base‑27. Empty inputs are treated
+/// as zero.
+String? csFinish(String sum, String carry) {
+  if (!_valid(sum) || !_valid(carry)) return null;
+  if (sum.isEmpty && carry.isEmpty) return '0';
+  return add27(sum, '${carry}0');
+}
+
+//// END FILE: lib/src/arith27.dart
+
+//// BEGIN FILE: lib/src/codec.dart
+
+library;
+
+/// Livnium Core – loss-free serialisation helpers.
+///
+/// Formats supported:
+///  1) CSV-like (human readable)
+///  2) Fixed-width decimal (each digit → 2 chars 00–26)
+///  3) Tail-sentinel BigInt  (safe round-trip; preserves leading zeros)
+///  4) Raw base-27 BigInt    (compact for math; caller must track length)
+///
+/// Notes:
+/// - Tail-sentinel appends the payload length (0–26) as the final base-27 digit.
+///   During decode we pop the sentinel and left-pad with zero-digits if needed.
+
+import 'alphabet.dart';
+
+final _k27 = BigInt.from(kRadix);
+
+// ────────────────────────────────────────────────────────────────────────────
+// 1) CSV (human-friendly)
+// ────────────────────────────────────────────────────────────────────────────
+
+/// Encode as comma-separated numbers.  "abc" → "1,2,3"
+String? encodeCsv(String text, {String sep = ','}) =>
+    stringToDigits(text)?.join(sep);
+
+/// Decode CSV back into text.  "1,2,3" → "abc"
+String? decodeCsv(String csv, {String sep = ','}) {
+  if (csv.isEmpty) return '';
+  late final List<int> digits;
+  try {
+    digits = csv.split(sep).map(int.parse).toList();
+  } on FormatException {
+    return null;
+  }
+  return digitsToString(digits);
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+/* 2) Fixed-width numeric: each digit → 2 decimal chars (00–26)
+   Example: "abc" → "010203"
+*/
+// ────────────────────────────────────────────────────────────────────────────
+
+String? encodeFixed(String text) =>
+    stringToDigits(text)?.map((d) => d.toString().padLeft(2, '0')).join();
+
+String? decodeFixed(String numeric) {
+  final n = numeric.length;
+  if (n == 0) return '';
+  if ((n & 1) == 1) return null;
+
+  // Fast digit check (no RegExp)
+  for (var i = 0; i < n; i++) {
+    final cu = numeric.codeUnitAt(i);
+    if (cu < 0x30 || cu > 0x39) return null; // non-digit
+  }
+
+  final ds = <int>[];
+  for (var i = 0; i < n; i += 2) {
+    final a = numeric.codeUnitAt(i) - 0x30;
+    final b = numeric.codeUnitAt(i + 1) - 0x30;
+    final v = a * 10 + b;
+    if (v < 0 || v >= kRadix) return null;
+    ds.add(v);
+  }
+  return digitsToString(ds);
+}
+
+/// Each glyph encodes to two decimal digits. A signed 64-bit int can hold at
+/// most 18 decimal digits, so the input is limited to 9 glyphs. Returns `null`
+/// if the encoded value would exceed that.
+int? encodeFixedInt(String text) {
+  if (text.length > 9) return null;
+  return int.tryParse(encodeFixed(text) ?? '');
+}
+
+/// Decodes a 64-bit int produced by [encodeFixedInt].
+String? decodeFixedInt(int value) {
+  final s = value.toString();
+  final even = (s.length + 1) & ~1; // round to even
+  return decodeFixed(s.padLeft(even, '0'));
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+// 3) Tail-sentinel BigInt  — safe round-trip
+// Layout: <payload digits …> <length digit (0–26)>
+// ────────────────────────────────────────────────────────────────────────────
+
+BigInt? encodeBigIntTail(String text) {
+  final payload = stringToDigits(text);
+  if (payload == null) return null;
+  if (payload.length > 26) {
+    throw ArgumentError(
+      'Tail-sentinel BigInt supports ≤26 symbols (got ${payload.length})',
+    );
+  }
+  BigInt n = BigInt.zero;
+  // fold payload
+  for (final d in payload) {
+    n = n * _k27 + BigInt.from(d);
+  }
+  // append length sentinel
+  n = n * _k27 + BigInt.from(payload.length);
+  return n;
+}
+
+String? decodeBigIntTail(BigInt n) {
+  if (n == BigInt.zero) return '';
+
+  // extract digits (base-27) MSB→LSB
+  var m = n;
+  final digits = <int>[];
+  while (m > BigInt.zero) {
+    digits.insert(0, (m % _k27).toInt());
+    m ~/= _k27;
+  }
+  if (digits.isEmpty) return '';
+
+  // last digit is the sentinel (length)
+  final sentinel = digits.removeLast();
+
+  // If BigInt collapsed leading zeros, digits.length may be < sentinel.
+  if (digits.length > sentinel) return null; // corrupt / mismatch
+  while (digits.length < sentinel) {
+    digits.insert(0, 0);
+  }
+  return digitsToString(digits);
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+// 4) Decimal wrappers for tail-sentinel
+// ────────────────────────────────────────────────────────────────────────────
+
+String? encodeDecimal(String text) => encodeBigIntTail(text)?.toString();
+
+String? decodeDecimal(String decimal) {
+  final n = BigInt.tryParse(decimal);
+  if (n == null) return null;
+  return decodeBigIntTail(n);
+}
+
+/// Encode to a decimal string and parse as 64-bit int. Returns `null` if the
+/// decimal representation would exceed 19 digits (signed 64-bit limit).
+int? encodeDecimalInt(String text) {
+  final dec = encodeDecimal(text);
+  if (dec == null) return null;
+  if (dec.length > 19) return null;
+  return int.tryParse(dec);
+}
+
+/// Decodes a decimal int produced by [encodeDecimalInt].
+String? decodeDecimalInt(int value) => decodeDecimal(value.toString());
+
+// ────────────────────────────────────────────────────────────────────────────
+// 5) Raw base-27 BigInt (math-friendly; loses leading zeros unless length known)
+// ────────────────────────────────────────────────────────────────────────────
+
+BigInt? encodeBigIntRaw(String text) {
+  final payload = stringToDigits(text);
+  if (payload == null) return null;
+  BigInt n = BigInt.zero;
+  for (final d in payload) {
+    n = n * _k27 + BigInt.from(d);
+  }
+  return n;
+}
+
+String? decodeBigIntRaw(BigInt n, {required int length}) {
+  if (length < 0) return null;
+  var m = n;
+  final ds = List<int>.filled(length, 0, growable: false);
+  for (var i = length - 1; i >= 0; i--) {
+    ds[i] = (m % _k27).toInt();
+    m ~/= _k27;
+  }
+  if (m != BigInt.zero) return null; // provided length too small
+  return digitsToString(ds);
+}
+
+/// Quick self-test (optional)
+void _selfTestCodec() {
+  const samples = ['', '0', 'a', '0az', 'xyz', '000', 'livnium'];
+  for (final w in samples) {
+    final c = decodeCsv(encodeCsv(w)!);
+    final f = decodeFixed(encodeFixed(w)!);
+    final bt = decodeBigIntTail(encodeBigIntTail(w)!);
+    assert(
+      w == c && w == f && w == bt,
+      'Codec mismatch on "$w": csv=$c fixed=$f bigTail=$bt',
+    );
+  }
+}
+
+//// END FILE: lib/src/codec.dart
+
+//// BEGIN FILE: test/potts_coupler_test.dart
+import 'dart:math' as math;
+
+import 'package:test/test.dart';
+import 'package:livnium_core/livnium_core.dart';
+import 'package:livnium_core/src/potts.dart';
+
+void main() {
+  group('Potts with couplers', () {
+    test('symmetry', () {
+      final net = Potts27.cube();
+      net.buildFromCouplers(
+        params: CouplerParams(tau0: 1, alpha: 1),
+        kernel: cosKernel,
+        targetNorm: 0.5,
+      );
+      for (var i = 0; i < net.n; i++) {
+        for (final j in net.nbrs[i]) {
+          final wij = net.w[i][j];
+          final wji = net.w[j][i];
+          for (var k = 0; k < Potts27.q; k++) {
+            for (var l = 0; l < Potts27.q; l++) {
+              expect(
+                wji[l * Potts27.q + k],
+                closeTo(wij[k * Potts27.q + l], 1e-9),
+              );
+            }
+          }
+        }
+      }
+    });
+
+    test('distance monotonicity', () {
+      final net = Potts27.cube();
+      net.buildFromCouplers(
+        params: CouplerParams(tau0: 1, alpha: 1),
+        kernel: cosKernel,
+        targetNorm: 0.5,
+      );
+      final coords = cube3Coords().toList();
+      final params = CouplerParams(tau0: 1, alpha: 1);
+      final mags = <int, List<double>>{1: [], 2: [], 3: []};
+      for (var i = 0; i < coords.length; i++) {
+        final L = coords[i].x.abs() + coords[i].y.abs() + coords[i].z.abs();
+        if (L == 0) continue;
+        mags[L]!.add(couplingAt(coords[i], params));
+      }
+      double avg(List<double> xs) => xs.reduce((a, b) => a + b) / xs.length;
+      final l1 = avg(mags[1]!);
+      final l2 = avg(mags[2]!);
+      final l3 = avg(mags[3]!);
+      expect(l1 >= l2 && l2 >= l3, isTrue);
+    });
+
+    test('geometry aids recall', () {
+      final patterns = [
+        List.generate(27, (i) => i % Potts27.q),
+        List.filled(27, 3),
+        List.generate(27, (i) => (i * 2) % Potts27.q),
+      ];
+
+      Potts27 buildGeom() {
+        final net = Potts27.cube();
+        net.buildFromCouplers(
+          params: CouplerParams(tau0: 1, alpha: 1),
+          kernel: cosKernel,
+          targetNorm: 0.5,
+        );
+        net.store(patterns, blend: 0.5);
+        return net;
+      }
+
+      Potts27 buildFlat() {
+        final net = Potts27.cube();
+        net.buildFromCouplers(
+          params: CouplerParams(tau0: 1, alpha: 1),
+          kernel: cosKernel,
+          targetNorm: 0.5,
+          geoMix: 0,
+        );
+        net.store(patterns, blend: 1.0);
+        return net;
+      }
+
+      final geom = buildGeom();
+      final flat = buildFlat();
+
+      final coords = cube3Coords().toList();
+      final target = patterns[0];
+      final noisy = List<int>.from(target);
+      for (var i = 0; i < coords.length; i++) {
+        if (coords[i].z == 1) {
+          noisy[i] = (noisy[i] + 1) % Potts27.q;
+        }
+      }
+      for (var i = 0; i < geom.n; i++) {
+        geom.s[i] = noisy[i];
+        flat.s[i] = noisy[i];
+      }
+      geom.relax();
+      flat.relax();
+
+      int correct(Potts27 net) {
+        var c = 0;
+        for (var i = 0; i < net.n; i++) {
+          if (net.s[i] == target[i]) c++;
+        }
+        return c;
+      }
+
+      expect(correct(geom) >= correct(flat), isTrue);
+    });
+  });
+}
+
+//// END FILE: test/potts_coupler_test.dart
+
+//// BEGIN FILE: test/alphabet_test.dart
+import 'package:test/test.dart';
+import 'package:livnium_core/src/alphabet.dart';
+
+void main() {
+  group('alphabet helpers', () {
+    test('stringToDigits converts valid string', () {
+      expect(stringToDigits('0az'), equals([0, 1, 26]));
+    });
+
+    test('stringToDigits returns null on invalid character', () {
+      expect(stringToDigits('0a?'), isNull);
+    });
+
+    test('digitsToString converts digits', () {
+      expect(digitsToString([0, 1, 26]), equals('0az'));
+    });
+
+    test('digitsToString returns null on out-of-range digit', () {
+      expect(digitsToString([0, 27]), isNull);
+    });
+  });
+}
+
+//// END FILE: test/alphabet_test.dart
+
+//// BEGIN FILE: test/arith27_test.dart
+import 'dart:math';
+import 'package:test/test.dart';
+import 'package:livnium_core/src/arith27.dart';
+import 'package:livnium_core/src/alphabet.dart';
+
+String randWord(Random rng, int len) {
+  // digits 0..26 → symbols
+  const symbols = [
+    '0',
+    'a',
+    'b',
+    'c',
+    'd',
+    'e',
+    'f',
+    'g',
+    'h',
+    'i',
+    'j',
+    'k',
+    'l',
+    'm',
+    'n',
+    'o',
+    'p',
+    'q',
+    'r',
+    's',
+    't',
+    'u',
+    'v',
+    'w',
+    'x',
+    'y',
+    'z',
+  ];
+  final b = StringBuffer();
+  for (var i = 0; i < len; i++) {
+    b.write(symbols[rng.nextInt(27)]);
+  }
+  final s = b.toString();
+  // avoid empty/invalid; normalize to at least one non-empty char
+  return s.isEmpty ? '0' : s;
+}
+
+void main() {
+  group('arith27 basics', () {
+    test('toDecimal/fromDecimal roundtrip', () {
+      final cases = ['0', 'a', 'z', 'a0', '0az', 'liv', '000', 'zzzzzz'];
+      for (final w in cases) {
+        final dec = toDecimal(w)!;
+        final back = fromDecimal(dec)!;
+        expect(
+          back,
+          equals(
+            RegExp(r'^0+$').hasMatch(w)
+                ? '0'
+                : w.replaceFirst(RegExp(r'^0+'), ''),
+          ),
+        );
+      }
+    });
+
+    test('add27 small cases', () {
+      expect(add27('0', '0'), '0');
+      expect(add27('a', '0'), 'a');
+      expect(add27('z', 'a'), 'a0'); // 26+1 = 27 → "a0" in base-27
+      final sum = fromDecimal(toDecimal('a0')! + toDecimal('a0')!)!;
+      expect(add27('a0', 'a0'), sum);
+    });
+
+    test('balanced matches canonical', () {
+      final pairs = [
+        ('0', '0'),
+        ('a', 'z'),
+        ('zz', 'zz'),
+        ('liv', 'nium'),
+        ('000', '000'),
+      ];
+      for (final (x, y) in pairs) {
+        expect(add27Balanced(x, y), equals(add27(x, y)));
+      }
+    });
+
+    test('empty string treated as zero', () {
+      expect(toDecimal(''), BigInt.zero);
+      expect(add27('', ''), '0');
+      expect(add27Balanced('', 'a'), 'a');
+      expect(add27Cyclic('z', 'a'), '0');
+      final cs = add27CarrySave3('', '', '')!;
+      expect(cs.sum, '0');
+      expect(cs.carry, '0');
+      expect(csFinish('', ''), '0');
+    });
+
+    test('modular addition without carry', () {
+      expect(add27Cyclic('z', 'z'), 'y');
+      expect(add27Cyclic('a0', 'a0'), 'b0');
+      expect(add27Cyclic('z', 'a'), '0');
+    });
+
+    test('carry-save addition roundtrip', () {
+      final r = add27CarrySave3('z', 'z', 'z')!;
+      expect(r.sum, 'x');
+      expect(r.carry, 'b');
+      expect(csFinish(r.sum, r.carry), add27(add27('z', 'z')!, 'z'));
+    });
+  });
+
+  group('property: 1000 random pairs', () {
+    test('add equals BigInt; balanced equals canonical', () {
+      final rng = Random(1337);
+      for (var t = 0; t < 1000; t++) {
+        final a = randWord(rng, rng.nextInt(40) + 1);
+        final b = randWord(rng, rng.nextInt(40) + 1);
+        final c = randWord(rng, rng.nextInt(40) + 1);
+
+        final decA = toDecimal(a)!;
+        final decB = toDecimal(b)!;
+        final decC = toDecimal(c)!;
+        final sumDec = decA + decB + decC;
+        final sumWord = fromDecimal(sumDec)!;
+
+        final abCanon = add27(a, b)!;
+        final abBal = add27Balanced(a, b)!;
+        expect(abBal, equals(abCanon));
+
+        final s1 = add27(abCanon, c)!;
+        final r = add27CarrySave3(a, b, c)!;
+        final s2 = csFinish(r.sum, r.carry)!;
+        final s3 = add27Balanced(abCanon, c)!;
+
+        expect(s1, equals(sumWord));
+        expect(s2, equals(sumWord));
+        expect(s3, equals(sumWord));
+      }
+    });
+
+    test('cyclic addition matches digitwise modular sum', () {
+      final rng = Random(2024);
+      for (var t = 0; t < 1000; t++) {
+        final a = randWord(rng, rng.nextInt(40) + 1);
+        final b = randWord(rng, rng.nextInt(40) + 1);
+        final cyc = add27Cyclic(a, b)!;
+        final n = max(a.length, b.length);
+        for (var i = 0; i < n; i++) {
+          final da = i < a.length ? symbolToValue(a[a.length - 1 - i])! : 0;
+          final db = i < b.length ? symbolToValue(b[b.length - 1 - i])! : 0;
+          final expected = (da + db) % 27;
+          final rc =
+              i < cyc.length ? symbolToValue(cyc[cyc.length - 1 - i])! : 0;
+          expect(rc, expected);
+        }
+      }
+    });
+
+    test('random decimal roundtrips', () {
+      final rng = Random(4242);
+      for (var t = 0; t < 1000; t++) {
+        // random up to ~256 bits
+        final bits = 1 + rng.nextInt(256);
+        BigInt n = BigInt.zero;
+        for (var i = 0; i < (bits / 32).ceil(); i++) {
+          n = (n << 32) + BigInt.from(rng.nextInt(0x100000000));
+        }
+        n = n.abs();
+        final w = fromDecimal(n)!;
+        final back = toDecimal(w)!;
+        expect(back, equals(n));
+      }
+    });
+  });
+}
+
+//// END FILE: test/arith27_test.dart
+
+//// BEGIN FILE: test/coupler_values_test.dart
+import 'package:test/test.dart';
+import 'package:livnium_core/livnium_core.dart';
+
+void main() {
+  test('coupler magnitudes match K splits (tau0=1, alpha=1)', () {
+    const K = 10.125;
+    final p = CouplerParams(tau0: 1, alpha: 1);
+    // L1=1 center
+    expect(couplingAt(const Vec3(1, 0, 0), p), closeTo(K, 1e-12));
+    // L1=2 edge
+    expect(
+      couplingAt(const Vec3(1, 1, 0), p),
+      closeTo(K / 2 / 2, 1e-12),
+    ); // 2.53125
+    // L1=3 corner
+    expect(
+      couplingAt(const Vec3(1, 1, 1), p),
+      closeTo(K / 3 / 3, 1e-12),
+    ); // 1.125
+  });
+}
+
+//// END FILE: test/coupler_values_test.dart
+
+//// BEGIN FILE: test/potts_test.dart
+import 'package:test/test.dart';
+import 'package:livnium_core/livnium_core.dart';
+
+void main() {
+  test('Potts network recovers stored pattern', () {
+    final net = Potts27.cube();
+    final pattern = List<int>.filled(net.n, 1);
+    net.store([pattern]);
+
+    final noisy = List<int>.from(pattern);
+    noisy[0] = 2;
+    noisy[5] = 3;
+    for (var i = 0; i < net.n; i++) {
+      net.s[i] = noisy[i];
+    }
+
+    net.relax();
+
+    expect(net.s, equals(pattern));
+  });
+}
+
+//// END FILE: test/potts_test.dart
+
+//// BEGIN FILE: test/core_usage_test.dart
+import 'package:test/test.dart';
+import 'package:livnium_core/livnium_core.dart';
+
+void main() {
+  group('quick start example', () {
+    const word = 'liv';
+
+    test('encodes and decodes across all codecs', () {
+      final csv = encodeCsv(word)!;
+      final fixed = encodeFixed(word)!;
+      final big = encodeBigIntTail(word)!;
+
+      expect(decodeCsv(csv), equals(word));
+      expect(decodeFixed(fixed), equals(word));
+      expect(decodeBigIntTail(big), equals(word));
+    });
+
+    test('computes word energy', () {
+      expect(wordEnergy9(word), equals(63.0));
+    });
+
+    test('computes symbol energy in K units', () {
+      expect(symbolEnergyK('a'), equals(10.125));
+      expect(symbolEnergyK('g'), equals(20.25));
+      expect(symbolEnergyK('s'), equals(30.375));
+      expect(symbolEnergyK('?'), isNull);
+    });
+
+    test('computes word energy in K units', () {
+      expect(wordEnergyK(word), equals(70.875));
+    });
+
+    test('rotates a vector around the Z axis', () {
+      const v = Vec3(1, 1, -1);
+      final rotated = rotateZ(v);
+      expect(rotated, equals(const Vec3(-1, 1, -1)));
+    });
+
+    test('fixed codec maps a0 to decimal 100', () {
+      final encoded = encodeFixedInt('a0');
+      expect(encoded, equals(100));
+      expect(decodeFixedInt(encoded!), equals('a0'));
+    });
+  });
+}
+
+//// END FILE: test/core_usage_test.dart
+
+//// BEGIN FILE: test/hierarchy_test.dart
+import 'package:test/test.dart';
+import 'package:livnium_core/livnium_core.dart';
+
+void main() {
+  group('hierarchical tree', () {
+    test('27 per system invariant', () {
+      final cube = MicroCube();
+      expect(cube.symbols.length, 27);
+      final c0 = cube.ensureChild(0);
+      final c1 = cube.ensureChild(1);
+      expect(cube.symbols.length, 27);
+      expect(c0.symbols.length, 27);
+      expect(c1.symbols.length, 27);
+    });
+
+    test('pooling takes child majority', () {
+      final parent = MicroCube();
+      final child = parent.ensureChild(3);
+      for (var i = 0; i < 27; i++) {
+        child.symbols[i] = 4;
+      }
+      child.symbols[0] = 2; // slight minority
+      parent.pullFromChildren();
+      expect(parent.symbols[3], 4);
+    });
+
+    test('enforces max 27 children and validates indices', () {
+      final cube = MicroCube();
+      for (var i = 0; i < 27; i++) {
+        cube.ensureChild(i);
+      }
+      expect(cube.children.length, 27);
+      expect(() => cube.ensureChild(27), throwsRangeError);
+      expect(() => cube.ensureChild(-1), throwsRangeError);
+      // Reusing existing child does not increase count
+      final c1 = cube.ensureChild(5);
+      final c2 = cube.ensureChild(5);
+      expect(identical(c1, c2), isTrue);
+      expect(cube.children.length, 27);
+    });
+
+    test('bias flows from parent to child center', () {
+      final parent = MicroCube();
+      final child = parent.ensureChild(5);
+      parent.symbols[5] = 6; // digit to bias toward
+      // child ambiguous zeros
+      for (var i = 0; i < 27; i++) {
+        child.symbols[i] = 0;
+      }
+      parent.pushBiasToChildren(0.3);
+      child.stepLocal(maxIters: 1);
+      expect(child.symbols[13], 6);
+    });
+
+    test('evolve aligns parent with child majority', () {
+      final tree = LivniumTree();
+      final root = CubePath.parse('');
+      final slotS = symbolToValue('s')!;
+      final ds = stringToDigits('unity')!;
+      for (var i = 0; i < 27; i++) {
+        tree.setSymbol(root, i, ds[i % ds.length]);
+      }
+      final childPath = CubePath.parse('s');
+      final sub = stringToDigits('love')!;
+      for (var i = 0; i < 27; i++) {
+        tree.setSymbol(childPath, i, sub[i % sub.length]);
+      }
+      final before = tree.getSymbol(root, slotS);
+      tree.evolve(maxDepth: 2, biasStrength: 0.2, localIters: 10);
+      tree.evolve(maxDepth: 2, biasStrength: 0.2, localIters: 10);
+      final after = tree.getSymbol(root, slotS);
+      final child = tree.getOrCreate(childPath);
+      final counts = List<int>.filled(27, 0);
+      for (final d in child.symbols) counts[d]++;
+      var arg = 0;
+      var best = -1;
+      for (var k = 0; k < 27; k++) {
+        if (counts[k] > best) {
+          best = counts[k];
+          arg = k;
+        }
+      }
+      expect(before, isNot(equals(arg)));
+      expect(after, equals(arg));
+    });
+  });
+}
+
+//// END FILE: test/hierarchy_test.dart
+
+//// BEGIN FILE: test/moves_invariants_test.dart
+import 'dart:math';
+import 'package:test/test.dart';
+import 'package:livnium_core/livnium_core.dart';
+
+void main() {
+  test('permutation invertibility & energy invariants', () {
+    final coords = cube3Coords().toList();
+    final symbols = List<int>.generate(coords.length, (i) => i);
+    final origSymbols = List<int>.from(symbols);
+    final origCoords = List<Vec3>.from(coords);
+
+    final rng = Random(1234);
+    final faces = Face.values;
+    final seq = List.generate(100, (_) {
+      final f = faces[rng.nextInt(faces.length)];
+      final q = rng.nextInt(3) + 1; // 1..3
+      final sign = rng.nextBool() ? 1 : -1;
+      return FaceMove(f, q * sign);
+    });
+
+    for (final m in seq) {
+      final perm = permutationFor(m);
+      applyPerm<int>(symbols, perm);
+      // also permute coordinates to track geometry
+      final tmp = List<Vec3>.from(coords);
+      for (var i = 0; i < perm.length; i++) {
+        coords[perm[i]] = tmp[i];
+      }
+    }
+
+    double energy(List<int> arr) => arr
+        .map((d) => symbolEnergy9(valueToSymbol(d)!)!)
+        .reduce((a, b) => a + b);
+    expect(energy(symbols), equals(energy(origSymbols)));
+
+    final coreCount = coords.where(isCore).length;
+    final centerCount = coords.where(isCenter).length;
+    final edgeCount = coords.where(isEdge).length;
+    final cornerCount = coords.where(isCorner).length;
+    expect([
+      coreCount,
+      centerCount,
+      edgeCount,
+      cornerCount,
+    ], equals([1, 6, 12, 8]));
+
+    final inv = seq.reversed
+        .map((m) => FaceMove(m.face, -m.quarterTurns))
+        .toList(growable: false);
+    applyMoves(symbols, inv);
+    for (final m in inv) {
+      final perm = permutationFor(m);
+      final tmp = List<Vec3>.from(coords);
+      for (var i = 0; i < perm.length; i++) {
+        coords[perm[i]] = tmp[i];
+      }
+    }
+    expect(symbols, equals(origSymbols));
+    expect(coords, equals(origCoords));
+  });
+}
+
+//// END FILE: test/moves_invariants_test.dart
+
+//// BEGIN FILE: test/arith_balanced_test.dart
+import 'package:test/test.dart';
+import 'package:livnium_core/src/arith27.dart';
+
+void main() {
+  test('balanced addition equals BigInt addition', () {
+    final cases = [
+      ['a', 'z'],
+      ['love', 'love'],
+      ['zzzz', 'a1a1'.replaceAll('1', 'a')],
+    ];
+    for (final c in cases) {
+      final got = add27Balanced(c[0], c[1])!;
+      final want = fromDecimal(toDecimal(c[0])! + toDecimal(c[1])!)!;
+      expect(got, equals(want));
+    }
+  });
+}
+
+//// END FILE: test/arith_balanced_test.dart
+
+//// BEGIN FILE: test/corebit_test.dart
+import 'package:livnium_core/livnium_core.dart';
+import 'package:test/test.dart';
+
+void main() {
+  test('core bit biases center cell', () {
+    final cube = MicroCube();
+    for (var i = 0; i < 27; i++) cube.symbols[i] = 0;
+    final core = CoreBit(cube);
+    final digit = symbolToValue('g')!;
+    core.configureCenter(digit, 1.0);
+    core.relax(maxIters: 1);
+    expect(cube.symbols[13], equals(digit));
+  });
+}
+
+//// END FILE: test/corebit_test.dart
+
+//// BEGIN FILE: example/moves_demo.dart
+import 'package:livnium_core/livnium_core.dart';
+
+void main() {
+  final symbols = List<int>.generate(27, (i) => i);
+  final orig = List<int>.from(symbols);
+
+  final seq = [FaceMove(Face.U, 1), FaceMove(Face.R, 1), FaceMove(Face.F, -1)];
+
+  print('start     : $orig');
+  applyMoves(symbols, seq);
+  print('scrambled : $symbols');
+
+  double energy(List<int> arr) =>
+      arr.map((d) => symbolEnergy9(valueToSymbol(d)!)!).reduce((a, b) => a + b);
+  print('energy orig=${energy(orig)} after=${energy(symbols)}');
+
+  final inv =
+      seq.reversed.map((m) => FaceMove(m.face, -m.quarterTurns)).toList();
+  applyMoves(symbols, inv);
+  print('restored  : $symbols');
+}
+
+//// END FILE: example/moves_demo.dart
+
+//// BEGIN FILE: example/recall_demo.dart
+import 'package:livnium_core/livnium_core.dart';
+
+void main() {
+  final patterns = [
+    List.generate(27, (i) => i % Potts27.q),
+    List.filled(27, 3),
+    List.generate(27, (i) => (i * 2) % Potts27.q),
+  ];
+
+  final netGeom = Potts27.cube();
+  netGeom.buildFromCouplers(
+    params: CouplerParams(tau0: 1, alpha: 1),
+    kernel: cosKernel,
+    targetNorm: 0.5,
+  );
+  netGeom.store(patterns, blend: 0.5);
+
+  final netFlat = Potts27.cube();
+  netFlat.buildFromCouplers(
+    params: CouplerParams(tau0: 1, alpha: 1),
+    kernel: cosKernel,
+    targetNorm: 0.5,
+    geoMix: 0,
+  );
+  netFlat.store(patterns, blend: 1.0);
+
+  final coords = cube3Coords().toList();
+  final target = patterns[0];
+  final noisy = List<int>.from(target);
+  for (var i = 0; i < coords.length; i++) {
+    if (coords[i].z == 1) {
+      noisy[i] = (noisy[i] + 1) % Potts27.q;
+    }
+  }
+
+  for (var i = 0; i < netGeom.n; i++) {
+    netGeom.s[i] = noisy[i];
+    netFlat.s[i] = noisy[i];
+  }
+
+  netGeom.relax();
+  netFlat.relax();
+
+  int correct(List<int> s) {
+    var c = 0;
+    for (var i = 0; i < target.length; i++) {
+      if (s[i] == target[i]) c++;
+    }
+    return c;
+  }
+
+  final geomCorrect = correct(netGeom.s);
+  final flatCorrect = correct(netFlat.s);
+
+  print('Geom correct: $geomCorrect / ${target.length}');
+  print('Flat correct: $flatCorrect / ${target.length}');
+}
+
+//// END FILE: example/recall_demo.dart
+
+//// BEGIN FILE: example/hierarchy_demo.dart
+import 'package:livnium_core/livnium_core.dart';
+
+void main() {
+  final tree = LivniumTree(energyPerNode: 10.125);
+  final root = CubePath.parse('');
+  final slotS = symbolToValue('s')!;
+
+  // Seed root with a repeating word pattern.
+  final ds = stringToDigits('unity')!;
+  for (var i = 0; i < 27; i++) {
+    tree.setSymbol(root, i, ds[i % ds.length]);
+  }
+
+  // Create child under slot 's' and set a sharper sub-pattern.
+  final childPath = CubePath.parse('s');
+  final sub = stringToDigits('love')!;
+  for (var i = 0; i < 27; i++) {
+    tree.setSymbol(childPath, i, sub[i % sub.length]);
+  }
+
+  // Evolve two rounds to propagate information.
+  tree.evolve(maxDepth: 2, biasStrength: 0.2, localIters: 10);
+  tree.evolve(maxDepth: 2, biasStrength: 0.2, localIters: 10);
+
+  // Compute child's majority and assert root reflects it.
+  final child = tree.getOrCreate(childPath);
+  final counts = List<int>.filled(27, 0);
+  for (final d in child.symbols) counts[d]++;
+  var arg = 0, best = -1;
+  for (var k = 0; k < 27; k++) {
+    if (counts[k] > best) {
+      best = counts[k];
+      arg = k;
+    }
+  }
+  final after = valueToSymbol(tree.getSymbol(root, slotS));
+  final maj = valueToSymbol(arg);
+  print('Root slot "s": majority(child)="$maj", after="$after"');
+  assert(after == maj);
+}
+
+//// END FILE: example/hierarchy_demo.dart
+
+//// BEGIN FILE: example/core_bit_demo.dart
+import 'package:livnium_core/livnium_core.dart';
+
+void main() {
+  final cube = MicroCube();
+  final core = CoreBit(cube);
+  print('Initial center: ' + valueToSymbol(cube.symbols[13])!);
+  final g = symbolToValue('g')!;
+  core.configureCenter(g, 1.0);
+  core.relax(maxIters: 5);
+  print('Biased center: ' + valueToSymbol(cube.symbols[13])!);
+}
+
+//// END FILE: example/core_bit_demo.dart
+
+//// BEGIN FILE: example/tunnel_demo.dart
+import 'package:livnium_core/livnium_core.dart';
+
+void main() {
+  final p = CouplerParams(tau0: 1.0, alpha: 1.0);
+
+  final top = rankTopCouplers(p, 10);
+  print('Top couplers (tau0=${p.tau0}, alpha=${p.alpha}):');
+  for (final t in top) {
+    print('${t.pos}  L=${t.L}  faces=${t.faces}  C=${t.C.toStringAsFixed(4)}');
+  }
+
+  // Interference sweep between best two
+  if (top.length >= 2) {
+    final c1 = top[0].C;
+    final c2 = top[1].C;
+    print('\nInterference sweep (two strongest):');
+    for (final deg in [0, 60, 120, 180, 240, 300]) {
+      final mag = complexSumMagnitude([(c1, 0), (c2, deg.toDouble())]);
+      print('Δφ=$deg°  |sum|=${mag.toStringAsFixed(4)}');
+    }
+  }
+}
+
+//// END FILE: example/tunnel_demo.dart
+
+//// BEGIN FILE: example/recall_curve.dart
+import 'dart:math';
+import 'package:livnium_core/livnium_core.dart';
+
+List<int> patternForWord(String w) {
+  final d = stringToDigits(w)!;
+  return List<int>.generate(27, (i) => d[i % d.length]);
+}
+
+void main() {
+  final words = ['love', 'grace', 'unity'];
+  final patterns = words.map(patternForWord).toList();
+
+  final net = Potts27.cube();
+  net.store(patterns, scale: 1.0, targetNorm: 0.5, blend: 1.0);
+
+  final rng = Random(42);
+  for (var p = 0.0; p <= 0.6001; p += 0.05) {
+    double acc = 0;
+    for (final pat in patterns) {
+      for (var trial = 0; trial < 5; trial++) {
+        final noisy = List<int>.from(pat);
+        final count = (p * noisy.length).round();
+        final idxs = List<int>.generate(noisy.length, (i) => i)..shuffle(rng);
+        for (var i = 0; i < count; i++) {
+          noisy[idxs[i]] = rng.nextInt(Potts27.q);
+        }
+        for (var i = 0; i < net.n; i++) {
+          net.s[i] = noisy[i];
+        }
+        net.relax(maxIters: 50);
+        var correct = 0;
+        for (var i = 0; i < pat.length; i++) {
+          if (net.s[i] == pat[i]) correct++;
+        }
+        acc += correct / pat.length;
+      }
+    }
+    final avg = acc / (patterns.length * 5);
+    print('${p.toStringAsFixed(2)},${avg.toStringAsFixed(3)}');
+  }
+}
+
+//// END FILE: example/recall_curve.dart
+
+//// BEGIN FILE: example/encode_demo.dart
+import 'package:livnium_core/livnium_core.dart';
+
+void main() {
+  const words = ['0', 'a', 'a0', 'xyz', '000', 'livnium', '0az'];
+
+  print('word  csv  fixed  big  dec  raw');
+  print('---------------------------------------------');
+
+  for (final w in words) {
+    final csv = encodeCsv(w)!;
+    final fixed = encodeFixed(w)!;
+    final big = encodeBigIntTail(w)!;
+    final dec = encodeDecimal(w)!;
+
+    final wCsv = decodeCsv(csv);
+    final wFixed = decodeFixed(fixed);
+    final wBig = decodeBigIntTail(big);
+    final wDec = decodeDecimal(dec);
+
+    assert(
+      w == wCsv && w == wFixed && w == wBig && w == wDec,
+      'Codec mismatch "$w": csv=$wCsv fixed=$wFixed big=$wBig dec=$wDec',
+    );
+
+    // RAW checks (pure base-27)
+    final raw = encodeBigIntRaw(w)!;
+    final wLen = stringToDigits(w)!.length;
+    final wRaw = decodeBigIntRaw(raw, length: wLen);
+    assert(w == wRaw, 'RAW mismatch "$w": raw=$raw wRaw=$wRaw');
+
+    // Spot-check known values
+    if (w == 'a0') {
+      assert(raw == BigInt.from(27), 'Expected raw("a0")==27, got $raw');
+    }
+    if (w == '000') {
+      assert(raw == BigInt.zero, 'Expected raw("000")==0, got $raw');
+      final restored = decodeBigIntRaw(raw, length: 3);
+      assert(
+        restored == '000',
+        'Leading zeros lost: expected "000", got $restored',
+      );
+    }
+
+    print('$w   $csv   $fixed   $big   $dec   $raw');
+  }
+
+  // Tail-sentinel structural checks
+  assert(encodeBigIntTail('0') == BigInt.from(1));
+  assert(encodeBigIntTail('a') == BigInt.from(28));
+  assert(encodeBigIntTail('a0') == BigInt.from(731));
+}
+
+//// END FILE: example/encode_demo.dart
+
+//// BEGIN FILE: example/projection_demo.dart
+import 'package:livnium_core/livnium_core.dart';
+
+void main() {
+  // Basic counts using public helpers
+  final pts = cube3Coords().toList();
+  final byExpo = <int, int>{};
+  for (final v in pts) {
+    final e = facesForVec3(v);
+    byExpo[e] = (byExpo[e] ?? 0) + 1;
+  }
+  print('Coarse by faces:');
+  for (final f in [3, 2, 1, 0]) {
+    print('faces=$f -> ${byExpo[f] ?? 0}');
+  }
+  print('');
+
+  // L1 / L∞ / L2 bins
+  final byL1 = <int, int>{};
+  final byLinf = <int, int>{};
+  final byL2r = <String, int>{};
+  for (final v in pts) {
+    byL1[l1(v)] = (byL1[l1(v)] ?? 0) + 1;
+    byLinf[linf(v)] = (byLinf[linf(v)] ?? 0) + 1;
+    byL2r[l2(v).toStringAsFixed(0)] =
+        (byL2r[l2(v).toStringAsFixed(0)] ?? 0) + 1;
+  }
+  print('Radial bins L1:');
+  for (final r in [3, 2, 1, 0]) {
+    print('L=$r -> ${byL1[r] ?? 0} points');
+  }
+  print('');
+
+  print('Radial bins L∞ (Chebyshev):');
+  for (final r in [1, 0]) {
+    print('L∞=$r -> ${byLinf[r] ?? 0} points');
+  }
+  print('');
+
+  print('Radial bins L2 (rounded):');
+  for (final r in ['2', '1', '0']) {
+    print('L2≈$r -> ${byL2r[r] ?? 0} points');
+  }
+  print('');
+
+  // Projections and heatmaps now come from public 'projection.dart'
+  void pretty(Map<(int, int), List<Vec3>> buckets, String label) {
+    print('Slices after dropping $label:');
+    for (final yy in [-1, 0, 1]) {
+      for (final xx in [-1, 0, 1]) {
+        final key = (xx, yy);
+        final c = buckets[key]?.length ?? 0;
+        print('key=(${key.$1}, ${key.$2})  count=$c');
+      }
+    }
+    print('');
+  }
+
+  pretty(dropAxis('z'), 'Z');
+  pretty(dropAxis('x'), 'X');
+  pretty(dropAxis('y'), 'Y');
+}
+
+//// END FILE: example/projection_demo.dart
+
+//// BEGIN FILE: example/grouping_test.dart
+import 'package:livnium_core/livnium_core.dart';
+
+void main() {
+  print('=== Drop Axis X ===');
+  final dropX = dropAxis('x');
+  for (final entry in dropX.entries) {
+    print('${entry.key}: ${entry.value}');
+  }
+
+  print('\n=== Drop Axis Y ===');
+  final dropY = dropAxis('y');
+  for (final entry in dropY.entries) {
+    print('${entry.key}: ${entry.value}');
+  }
+
+  print('\n=== Drop Axis Z ===');
+  final dropZ = dropAxis('z');
+  for (final entry in dropZ.entries) {
+    print('${entry.key}: ${entry.value}');
+  }
+
+  print('\n=== Radial Bins (L1 distance) ===');
+  final radial = radialBins();
+  for (final entry in radial.entries) {
+    print('L1=${entry.key}: ${entry.value}');
+  }
+
+  print('\n=== Coarse Grain: Faces count ===');
+  final coarse = coarseGrain(
+    (v) => ((v.x != 0) ? 1 : 0) + ((v.y != 0) ? 1 : 0) + ((v.z != 0) ? 1 : 0),
+  );
+  for (final entry in coarse.entries) {
+    print('Faces=${entry.key}: ${entry.value}');
+  }
+}
+
+//// END FILE: example/grouping_test.dart
+
+//// BEGIN FILE: example/arith_carry_demo.dart
+import 'dart:math';
+import 'package:livnium_core/src/arith27.dart';
+import 'package:livnium_core/livnium_core.dart';
+
+String randWord(Random rng, int len) {
+  final sb = StringBuffer();
+  for (var i = 0; i < len; i++) {
+    sb.write(valueToSymbol(rng.nextInt(kRadix))!);
+  }
+  return sb.toString();
+}
+
+({String sum, int carries, int ripple}) addPlainStats(String a, String b) {
+  int i = a.length - 1, j = b.length - 1, carry = 0;
+  int carries = 0, run = 0, maxRun = 0;
+  final out = StringBuffer();
+  while (i >= 0 || j >= 0 || carry != 0) {
+    final da = i >= 0 ? symbolToValue(a[i--])! : 0;
+    final db = j >= 0 ? symbolToValue(b[j--])! : 0;
+    var s = da + db + carry;
+    carry = s ~/ kRadix;
+    s %= kRadix;
+    out.write(valueToSymbol(s)!);
+    if (carry != 0) {
+      carries++;
+      run++;
+    } else {
+      if (run > maxRun) maxRun = run;
+      run = 0;
+    }
+  }
+  if (run > maxRun) maxRun = run;
+  final res = out.toString().split('').reversed.join();
+  return (sum: res, carries: carries, ripple: maxRun);
+}
+
+({String sum, int carries, int ripple}) addBalancedStats(String a, String b) {
+  int i = a.length - 1, j = b.length - 1, carryC = 0;
+  int carries = 0, run = 0, maxRun = 0;
+  final out = <int>[];
+  while (i >= 0 || j >= 0) {
+    final da = i >= 0 ? symbolToValue(a[i--])! : 0;
+    final db = j >= 0 ? symbolToValue(b[j--])! : 0;
+    var sc = (da - 13) + (db - 13) + carryC;
+    if (sc > 13) {
+      sc -= 27;
+      carryC = 1;
+    } else if (sc < -13) {
+      sc += 27;
+      carryC = -1;
+    } else {
+      carryC = 0;
+    }
+    out.add(sc);
+    if (carryC != 0) {
+      carries++;
+      run++;
+    } else {
+      if (run > maxRun) maxRun = run;
+      run = 0;
+    }
+  }
+  if (carryC != 0) {
+    out.add(carryC);
+    carries++;
+    run++;
+  }
+  if (run > maxRun) maxRun = run;
+  final buf = StringBuffer();
+  for (var k = out.length - 1; k >= 0; k--) {
+    buf.write(valueToSymbol(out[k] + 13)!);
+  }
+  final res = buf.toString().replaceFirst(RegExp(r'^0+'), '');
+  return (sum: res.isEmpty ? '0' : res, carries: carries, ripple: maxRun);
+}
+
+void main() {
+  final rng = Random(123);
+  print('N  carries_plain  carries_bal  ripple_plain  ripple_bal');
+  for (final N in [16, 64, 256]) {
+    int cPlain = 0, cBal = 0;
+    int rPlain = 0, rBal = 0;
+    for (var t = 0; t < 100; t++) {
+      final a = randWord(rng, N);
+      final b = randWord(rng, N);
+      final p = addPlainStats(a, b);
+      final q = addBalancedStats(a, b);
+      cPlain += p.carries;
+      cBal += q.carries;
+      rPlain += p.ripple;
+      rBal += q.ripple;
+    }
+    final avgCarriesPlain = cPlain / 100;
+    final avgCarriesBal = cBal / 100;
+    final avgRipplePlain = rPlain / 100;
+    final avgRippleBal = rBal / 100;
+    print(
+      '$N  ${avgCarriesPlain.toStringAsFixed(2)}  '
+      '${avgCarriesBal.toStringAsFixed(2)}  '
+      '${avgRipplePlain.toStringAsFixed(2)}  '
+      '${avgRippleBal.toStringAsFixed(2)}',
+    );
+  }
+}
+
+//// END FILE: example/arith_carry_demo.dart
+
+//// BEGIN FILE: example/rotate_demo.dart
+import 'package:livnium_core/livnium_core.dart';
+
+void main() {
+  // identity check
+  for (final v in cube3Coords()) {
+    var p = v;
+    for (var i = 0; i < 4; i++) {
+      p = rotateX(p);
+    }
+    assert(p == v);
+  }
+  print('rotateX^4 identity ok');
+
+  // sequence + inverse
+  final seq = [Rotation(RotationAxis.x, 1), Rotation(RotationAxis.z, 2)];
+  final inv = invertRotations(seq);
+  var ok = true;
+  for (final v in cube3Coords()) {
+    final w = applyRotations(v, seq);
+    final back = applyRotations(w, inv);
+    if (v != back) {
+      ok = false;
+      break;
+    }
+  }
+  print('sequence inverse: ${ok ? "ok" : "fail"}');
+}
+
+//// END FILE: example/rotate_demo.dart
+
+//// BEGIN FILE: example/coupler_demo.dart
+import 'package:livnium_core/livnium_core.dart';
+
+void main() {
+  final p = CouplerParams(tau0: 1.0, alpha: 1.0);
+
+  // Show top 10 strongest couplers
+  final top = rankTopCouplers(p, 10);
+  print('Top couplers (alpha=${p.alpha}):');
+  for (final t in top) {
+    print(
+        'pos=${t.pos}  C=${t.C.toStringAsFixed(6)}  L=${t.L}  faces=${t.faces}');
+  }
+
+  // Bucket by exposure to verify corner/edge/face magnitudes at L=1
+  // (There are exactly 6 face centers, 12 edges, 8 corners in the shell L1=1..3.)
+  final sample = <String, List<double>>{'F': [], 'E': [], 'C': []};
+  for (final v in cube3Coords()) {
+    if (v == const Vec3(0, 0, 0)) continue;
+    final f = facesForVec3(v);
+    final c = couplingAt(v, p);
+    switch (f) {
+      case 1:
+        sample['F']!.add(c);
+        break;
+      case 2:
+        sample['E']!.add(c);
+        break;
+      case 3:
+        sample['C']!.add(c);
+        break;
+    }
+  }
+  double avg(List<double> xs) =>
+      xs.isEmpty ? 0 : xs.reduce((a, b) => a + b) / xs.length;
+  print('\nAverage C by class (alpha=${p.alpha}): '
+      'F=${avg(sample['F']!).toStringAsFixed(6)}  '
+      'E=${avg(sample['E']!).toStringAsFixed(6)}  '
+      'C=${avg(sample['C']!).toStringAsFixed(6)}');
+
+  // Phasor toy: assume all L=1 points (6 faces + 12 edges + 8 corners at L=1?)
+  // Actually in {-1,0,1}^3: L1=1 → exactly 6 points (face centers).
+  // Sum them with symmetric phases to show constructive/destructive behavior.
+  final l1Faces = <(double, double)>[];
+  for (final v in cube3Coords()) {
+    if (v == const Vec3(0, 0, 0)) continue;
+    if ((v.x.abs() + v.y.abs() + v.z.abs()) == 1) {
+      final c = couplingAt(v, p);
+      // spread phases for demo: 0°, 60°, 120°, ...
+      final phase = 60.0 * l1Faces.length;
+      l1Faces.add((c, phase));
+    }
+  }
+  final R = complexSumMagnitude(l1Faces);
+  print('\nPhasor sum over L1=1 face centers: |R|=${R.toStringAsFixed(6)}');
+}
+
+//// END FILE: example/coupler_demo.dart
+
+//// BEGIN FILE: example/interference_demo.dart
+import 'package:livnium_core/livnium_core.dart';
+
+void main() {
+  final top = rankTopCouplers(CouplerParams(tau0: 1, alpha: 1), 2);
+  final c1 = top[0].C;
+  final c2 = top[1].C;
+  for (var deg = 0; deg <= 360; deg += 15) {
+    final mag = complexSumMagnitude([(c1, 0.0), (c2, deg.toDouble())]);
+    print('$deg,$mag');
+  }
+}
+
+//// END FILE: example/interference_demo.dart
+
+//// BEGIN FILE: example/energy_demo.dart
+import 'package:livnium_core/livnium_core.dart';
+
+void main() {
+  final glyphs = ['0', 'a', 'f', 'g', 'r', 's', 'z'];
+  for (final ch in glyphs) {
+    final f = facesForGlyph(ch);
+    final e9 = symbolEnergy9(ch);
+    final eK = symbolEnergyK(ch);
+    print('$ch  faces=$f  SE9=$e9  SEK=$eK');
+  }
+  final words = ['a', 'gr', 'sz', 'livnium'];
+  for (final w in words) {
+    print('$w  wordEnergy9=${wordEnergy9(w)}  wordEnergyK=${wordEnergyK(w)}');
+  }
+  print('K = $equilibriumConstant');
+  print(
+    'perFace: f1=${perFaceUnitEnergy(1)} f2=${perFaceUnitEnergy(2)} f3=${perFaceUnitEnergy(3)}',
+  );
+}
+
+//// END FILE: example/energy_demo.dart
+
+//// BEGIN FILE: example/exposure_demo.dart
+import 'package:livnium_core/livnium_core.dart';
+
+void main() {
+  final exposure = generateExposureMapping(mode: 'conventional');
+  final coords = <String, Vec3>{};
+  exposure.forEach((sym, v) => coords[sym] = _sideToVec3(v.$2));
+  _printAllFaces(coords);
+}
+
+// --- local helpers copied from the old demo (scoped to example only) ---
+Vec3 _sideToVec3(String side) {
+  if (side == 'CORE') return const Vec3(0, 0, 0);
+  int x = 0, y = 0, z = 0;
+  for (final m in RegExp(r'([+-][XYZ])').allMatches(side)) {
+    switch (m.group(0)) {
+      case '+X':
+        x = 1;
+        break;
+      case '-X':
+        x = -1;
+        break;
+      case '+Y':
+        y = 1;
+        break;
+      case '-Y':
+        y = -1;
+        break;
+      case '+Z':
+        z = 1;
+        break;
+      case '-Z':
+        z = -1;
+        break;
+    }
+  }
+  return Vec3(x, y, z);
+}
+
+void _printFace(String name, int axis, int sign, Map<String, Vec3> coords) {
+  print('Face: $name');
+  for (int rowY = 1; rowY >= -1; rowY--) {
+    var row = '';
+    for (int colX = -1; colX <= 1; colX++) {
+      Vec3 target = const Vec3(0, 0, 0);
+      if (axis == 2) target = Vec3(colX, rowY, sign); // Z face
+      if (axis == 0) target = Vec3(sign, rowY, -colX); // X face
+      if (axis == 1) target = Vec3(colX, sign, -rowY); // Y face
+
+      final match = coords.entries
+          .firstWhere(
+            (e) => e.value == target,
+            orElse: () => MapEntry(' ', const Vec3(0, 0, 0)),
+          )
+          .key;
+      row += ' ${match.padRight(1)} ';
+    }
+    print(row);
+  }
+  print('');
+}
+
+void _printAllFaces(Map<String, Vec3> coords) {
+  _printFace('Up (Z=+1)', 2, 1, coords);
+  _printFace('Down (Z=-1)', 2, -1, coords);
+  _printFace('Left (X=-1)', 0, -1, coords);
+  _printFace('Right (X=+1)', 0, 1, coords);
+  _printFace('Front (Y=+1)', 1, 1, coords);
+  _printFace('Back (Y=-1)', 1, -1, coords);
+}
+
+//// END FILE: example/exposure_demo.dart
+
+//// BEGIN FILE: bin/livnium.dart
+#!/usr/bin/env dart
+import 'dart:io';
+import 'package:args/args.dart';
+import 'package:livnium_core/livnium_core.dart';
+
+void main(List<String> argv) {
+  final p = ArgParser()
+    ..addCommand('encode')
+    ..addCommand('decode')
+    ..addCommand('add')        // base-27 addition (canonical/balanced/cyclic)
+    ..addCommand('cs')         // carry-save: a + b + c
+    ..addCommand('energy')     // SE9 or --k
+    ..addCommand('couplers')   // rank top-N
+    ..addCommand('moves')      // apply face-move sequence
+    ..addCommand('project')    // drop-axis/radial/coarse
+    ..addCommand('mapping')    // exposure mapping (conventional|harmonic)
+    ..addCommand('validate')   // run internal self-checks
+    ..addFlag('help', abbr: 'h', negatable: false);
+
+  // encode/decode options
+  (p.commands['encode']!
+    ..addOption('codec',
+        allowed: ['csv', 'fixed', 'decimal', 'raw'],
+        defaultsTo: 'decimal',
+        help: 'Choose output format.')
+    ..addOption('len',
+        help: 'Required for --codec=raw decode counterpart (informational).'))
+  ;
+  (p.commands['decode']!
+    ..addOption('codec',
+        allowed: ['csv', 'fixed', 'decimal', 'raw'],
+        defaultsTo: 'decimal',
+        help: 'Choose input format.')
+    ..addOption('len',
+        help: 'Required length for RAW decoding.'))
+  ;
+
+  // add / cs
+  (p.commands['add']!
+    ..addOption('mode',
+        allowed: ['canonical', 'balanced', 'cyclic'],
+        defaultsTo: 'canonical'))
+  ;
+  (p.commands['cs']!); // no options
+
+  // energy
+  (p.commands['energy']!
+    ..addFlag('k', help: 'Use K-units instead of SE9 (default SE9).'))
+  ;
+
+  // couplers
+  (p.commands['couplers']!
+    ..addOption('n', defaultsTo: '10')
+    ..addOption('tau0', defaultsTo: '1.0')
+    ..addOption('alpha', defaultsTo: '1.0'))
+  ;
+
+  // moves
+  (p.commands['moves']!
+    ..addOption('seq',
+        abbr: 's',
+        help: 'Sequence like: "U R F\' D2".'))
+  ;
+
+  // project
+  (p.commands['project']!
+    ..addFlag('radial', help: 'Show L1 radial bins.')
+    ..addOption('drop',
+        allowed: ['x', 'y', 'z'],
+        help: 'Drop one axis and bucket by the other two.')
+    ..addFlag('coarse-faces',
+        help: 'Group by exposure (faces) count.'))
+  ;
+
+  // mapping
+  (p.commands['mapping']!
+    ..addOption('mode',
+        allowed: ['conventional', 'harmonic'],
+        defaultsTo: 'conventional'))
+  ;
+
+  ArgResults args;
+  try {
+    args = p.parse(argv);
+  } catch (e) {
+    _usage(p, error: e.toString());
+    exit(64);
+  }
+
+  if (args['help'] as bool || args.command == null) {
+    _usage(p);
+    return;
+  }
+
+  switch (args.command!.name) {
+    case 'encode':
+      _encode(args.command!);
+      break;
+    case 'decode':
+      _decode(args.command!);
+      break;
+    case 'add':
+      _add(args.command!);
+      break;
+    case 'cs':
+      _cs(args.command!);
+      break;
+    case 'energy':
+      _energy(args.command!);
+      break;
+    case 'couplers':
+      _couplers(args.command!);
+      break;
+    case 'moves':
+      _moves(args.command!);
+      break;
+    case 'project':
+      _project(args.command!);
+      break;
+    case 'mapping':
+      _mapping(args.command!);
+      break;
+    case 'validate':
+      final ok = runAllSelfChecks();
+      stdout.writeln(ok ? '✅ validate: OK' : '❌ validate: FAILED');
+      exit(ok ? 0 : 1);
+    default:
+      _usage(p);
+      exit(64);
+  }
+}
+
+void _encode(ArgResults a) {
+  final codec = a['codec'] as String;
+  if (a.rest.isEmpty) {
+    stderr.writeln('encode --codec <$codec> <word>');
+    exit(64);
+  }
+  final w = a.rest.first;
+
+  switch (codec) {
+    case 'csv':
+      final s = encodeCsv(w);
+      if (s == null) _bad('invalid word'); stdout.writeln(s);
+      break;
+    case 'fixed':
+      final s = encodeFixed(w);
+      if (s == null) _bad('invalid word'); stdout.writeln(s);
+      break;
+    case 'decimal':
+      final s = encodeDecimal(w);
+      if (s == null) _bad('invalid word'); stdout.writeln(s);
+      break;
+    case 'raw':
+      final n = encodeBigIntRaw(w);
+      if (n == null) _bad('invalid word');
+      final len = stringToDigits(w)!.length;
+      stdout.writeln('$n (len=$len)');
+      break;
+  }
+}
+
+void _decode(ArgResults a) {
+  final codec = a['codec'] as String;
+  if (a.rest.isEmpty) {
+    stderr.writeln('decode --codec <$codec> <payload>');
+    exit(64);
+  }
+  final s = a.rest.first;
+  switch (codec) {
+    case 'csv':
+      final out = decodeCsv(s);
+      if (out == null) _bad('invalid CSV'); stdout.writeln(out);
+      break;
+    case 'fixed':
+      final out = decodeFixed(s);
+      if (out == null) _bad('invalid fixed numeric'); stdout.writeln(out);
+      break;
+    case 'decimal':
+      final out = decodeDecimal(s);
+      if (out == null) _bad('invalid decimal'); stdout.writeln(out);
+      break;
+    case 'raw':
+      final lenStr = a['len'] as String?;
+      if (lenStr == null) _bad('--len is required for raw decoding');
+      final len = int.tryParse(lenStr) ?? _bad('--len must be an integer');
+      final n = BigInt.tryParse(s) ?? _bad('invalid BigInt');
+      final out = decodeBigIntRaw(n, length: len);
+      if (out == null) _bad('raw decode failed (length mismatch?)');
+      stdout.writeln(out);
+      break;
+  }
+}
+
+void _add(ArgResults a) {
+  final mode = a['mode'] as String;
+  if (a.rest.length != 2) {
+    stderr.writeln('add --mode <$mode> <a> <b>');
+    exit(64);
+  }
+  final x = a.rest[0], y = a.rest[1];
+  String? res;
+  switch (mode) {
+    case 'canonical':
+      res = add27(x, y);
+      break;
+    case 'balanced':
+      res = add27Balanced(x, y);
+      break;
+    case 'cyclic':
+      res = add27Cyclic(x, y);
+      break;
+  }
+  if (res == null) _bad('invalid base-27 word');
+  stdout.writeln(res);
+}
+
+void _cs(ArgResults a) {
+  if (a.rest.length != 3) {
+    stderr.writeln('cs <a> <b> <c>');
+    exit(64);
+  }
+  final r = add27CarrySave3(a.rest[0], a.rest[1], a.rest[2]);
+  if (r == null) _bad('invalid base-27 word');
+  final finished = csFinish(r.sum, r.carry);
+  stdout.writeln('sum=${r.sum} carry=${r.carry} final=${finished ?? "ERR"}');
+}
+
+void _energy(ArgResults a) {
+  if (a.rest.isEmpty) {
+    stderr.writeln('energy <word> [--k]');
+    exit(64);
+  }
+  final w = a.rest.first;
+  final useK = a['k'] as bool;
+  final e = useK ? wordEnergyK(w) : wordEnergy9(w);
+  if (e == null) _bad('invalid base-27 word');
+  stdout.writeln(e);
+}
+
+void _couplers(ArgResults a) {
+  final n = int.tryParse(a['n'] as String) ?? 10;
+  final tau0 = double.tryParse(a['tau0'] as String) ?? 1.0;
+  final alpha = double.tryParse(a['alpha'] as String) ?? 1.0;
+  final p = CouplerParams(tau0: tau0, alpha: alpha);
+  final top = rankTopCouplers(p, n);
+  stdout.writeln('Top $n couplers (tau0=$tau0, alpha=$alpha):');
+  for (final t in top) {
+    stdout.writeln(
+        'pos=${t.pos}  L=${t.L}  faces=${t.faces}  C=${t.C.toStringAsFixed(6)}');
+  }
+}
+
+void _moves(ArgResults a) {
+  final seqStr = (a['seq'] as String?) ?? (a.rest.isNotEmpty ? a.rest.join(' ') : '');
+  if (seqStr.trim().isEmpty) {
+    stderr.writeln("moves --seq \"U R F' D2\"");
+    exit(64);
+  }
+  final seq = _parseMoves(seqStr);
+  final perm = _permutationForMany(seq);
+  stdout.writeln('Permutation (oldIndex -> newIndex):');
+  stdout.writeln(perm);
+
+  final data = List<int>.generate(27, (i) => i);
+  applyPerm<int>(data, perm);
+  stdout.writeln('Applied to [0..26]:');
+  stdout.writeln(data);
+}
+
+void _project(ArgResults a) {
+  if (a['radial'] as bool) {
+    final r = radialBins();
+    for (final k in [0, 1, 2, 3]) {
+      stdout.writeln('L1=$k -> ${r[k]?.length ?? 0} points');
+    }
+    return;
+  }
+  if (a['coarse-faces'] as bool) {
+    final c = coarseGrain<int>((v) =>
+    ((v.x != 0) ? 1 : 0) + ((v.y != 0) ? 1 : 0) + ((v.z != 0) ? 1 : 0));
+    for (final k in [0, 1, 2, 3]) {
+      stdout.writeln('faces=$k -> ${c[k]?.length ?? 0} points');
+    }
+    return;
+  }
+  final drop = a['drop'] as String?;
+  if (drop == null) {
+    stderr.writeln('project --radial | --coarse-faces | --drop <x|y|z>');
+    exit(64);
+  }
+  final buckets = dropAxis(drop);
+  for (final entry in buckets.entries) {
+    stdout.writeln('key=${entry.key} count=${entry.value.length}');
+  }
+}
+
+void _mapping(ArgResults a) {
+  final mode = a['mode'] as String;
+  final m = generateExposureMapping(mode: mode);
+  stdout.writeln('symbol,faces,side');
+  for (final e in m.entries) {
+    stdout.writeln('${e.key},${e.value.$1},${e.value.$2}');
+  }
+}
+
+List<FaceMove> _parseMoves(String s) {
+  Face faceOf(String t) => switch (t) {
+    'U' => Face.U,
+    'D' => Face.D,
+    'L' => Face.L,
+    'R' => Face.R,
+    'F' => Face.F,
+    'B' => Face.B,
+    _ => throw FormatException('Unknown face "$t"'),
+  };
+  int qTurns(String suffix) => suffix == '2' ? 2 : (suffix == "'" ? -1 : 1);
+  final out = <FaceMove>[];
+  for (final raw in s.split(RegExp(r'\s+'))) {
+    if (raw.isEmpty) continue;
+    final face = faceOf(raw[0]);
+    final t = qTurns(raw.substring(1));
+    out.add(FaceMove(face, t));
+  }
+  return out;
+}
+
+List<int> _permutationForMany(List<FaceMove> seq) {
+  var perm = List<int>.generate(27, (i) => i);
+  for (final m in seq) {
+    final p = permutationFor(m);
+    final tmp = List<int>.from(perm);
+    for (var i = 0; i < perm.length; i++) {
+      perm[i] = p[tmp[i]];
+    }
+  }
+  return perm;
+}
+
+Never _bad(String msg) {
+  stderr.writeln('Error: $msg');
+  exit(64);
+}
+
+void _usage(ArgParser p, {String? error}) {
+  if (error != null) stderr.writeln('Error: $error\n');
+  stdout.writeln('''
+livnium — CLI for Livnium Core
+
+Usage:
+  livnium encode   --codec <csv|fixed|decimal|raw> <word>
+  livnium decode   --codec <csv|fixed|decimal|raw> <payload> [--len N]
+  livnium add      --mode <canonical|balanced|cyclic> <a> <b>
+  livnium cs       <a> <b> <c>
+  livnium energy   <word> [--k]
+  livnium couplers [--n 10] [--tau0 1.0] [--alpha 1.0]
+  livnium moves    --seq "U R F' D2"
+  livnium project  --radial | --coarse-faces | --drop <x|y|z>
+  livnium mapping  [--mode conventional|harmonic]
+  livnium validate
+
+Examples:
+  livnium encode --codec decimal livnium
+  livnium decode --codec raw 123456 --len 5
+  livnium add --mode balanced love love
+  livnium energy a0rsw --k
+  livnium couplers --n 5 --alpha 1.5
+  livnium project --drop z
+''');
+}
+
+//// END FILE: bin/livnium.dart
+
