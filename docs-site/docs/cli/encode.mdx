@@ -1,0 +1,25 @@
+---
+id: encode
+title: encode
+sidebar_label: encode
+---
+
+```bash
+livnium encode --codec <csv|fixed|decimal|raw> <word>
+```
+
+**Pick a format:**
+
+* `csv` → human-readable digits: `a0z` → `1,0,26`
+* `fixed` → two digits per symbol: `a0z` → `010026`  *(preserves length)*
+* `decimal` (**dec**) → length-preserving decimal BigInt: `a0` → `731`
+* `raw` → pure base-27 value: `a0` → `27`
+
+\:::caution RAW decoding needs length
+`raw` collapses leading `0`s. To decode, pass the original length:
+
+```bash
+livnium decode --codec raw 27 --len 2   # -> 'a0'
+```
+
+\:::

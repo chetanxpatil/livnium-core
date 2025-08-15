@@ -32,7 +32,7 @@ const sidebars: SidebarsConfig = {
     {
       type: 'category',
       label: 'CLI',
-      items: ['cli/overview'],
+      items: ['cli/overview', 'cli/encode', 'cli/decode', 'cli/add', 'cli/cs', 'cli/energy', 'cli/couplers', 'cli/moves', 'cli/project', 'cli/mapping', 'cli/validate'],
     },
     {
       type: 'category',
