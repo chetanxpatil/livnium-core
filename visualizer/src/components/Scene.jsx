@@ -1,21 +1,24 @@
 import React from 'react';
+import { useFrame } from '@react-three/fiber';
 import { useSharedGeometries } from '../lib/threeShared.js';
 import { isHiddenByDrop } from '../lib/slicing.js';
 import { Axes } from './Axes.jsx';
 import { Controls } from './Controls.jsx';
 import { Cubelet } from './Cubelet.jsx';
 import { useStore } from '../app/store.jsx';
+import { stepPotts27 } from '../lib/potts27.js';
 
 export function Scene({ cubes }) {
   const {
-    mode,
-    alpha,
-    tau0,
     drop,
     slice,
     showLabels,
     labelMode,
     showAxes,
+    pottsModel,
+    setPottsModel,
+    temperature,
+    isPottsRunning,
   } = useStore();
 
   const shared = useSharedGeometries();
@@ -28,14 +31,18 @@ export function Scene({ cubes }) {
         pos={c.pos}
         labelMode={labelMode}
         showNames={showLabels}
-        mode={mode}
-        alpha={alpha}
-        tau0={tau0}
         hidden={hidden}
         shared={shared}
       />
     );
   };
+
+  useFrame(() => {
+    if (isPottsRunning) {
+      stepPotts27(pottsModel, temperature);
+      setPottsModel({ ...pottsModel });
+    }
+  });
 
   return (
     <>

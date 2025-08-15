@@ -17,6 +17,11 @@ export function TopBar() {
     setShowLabels,
     labelMode,
     setLabelMode,
+    temperature,
+    setTemperature,
+    isPottsRunning,
+    setIsPottsRunning,
+    resetPotts,
     reset,
   } = useStore();
 
@@ -123,6 +128,27 @@ export function TopBar() {
 
       <button className={`${btn} ml-2`} onClick={reset}>
         Reset
+      </button>
+      <div className="flex items-center gap-2 ml-4">
+        <span className={label}>Temp</span>
+        <input
+          type="range"
+          min={0.1}
+          max={5}
+          step={0.1}
+          value={temperature}
+          onChange={(e) => setTemperature(parseFloat(e.target.value))}
+        />
+        <span className="tabular-nums">{temperature.toFixed(1)}</span>
+      </div>
+      <button
+        className={`${btn} ml-2`}
+        onClick={() => setIsPottsRunning(!isPottsRunning)}
+      >
+        {isPottsRunning ? 'Stop Potts' : 'Start Potts'}
+      </button>
+      <button className={`${btn} ml-2`} onClick={resetPotts}>
+        Reset Potts
       </button>
     </div>
   );
