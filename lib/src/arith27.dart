@@ -14,7 +14,9 @@ bool _valid(String s) => s.split('').every((c) => _d(c) != null);
 
 String _stripLeadingZeros(String s) {
   var i = 0;
-  while (i < s.length - 1 && s.codeUnitAt(i) == '0'.codeUnitAt(0)) i++;
+  while (i < s.length - 1 && s.codeUnitAt(i) == '0'.codeUnitAt(0)) {
+    i++;
+  }
   return s.substring(i);
 }
 
@@ -60,10 +62,12 @@ String? fromDecimal(BigInt n) {
 String? add27(String a, String b) {
   if (!_valid(a) || !_valid(b)) return null;
   if (a.isEmpty && b.isEmpty) return '0';
-  if (a.isEmpty)
+  if (a.isEmpty) {
     return _stripLeadingZeros(b).isEmpty ? '0' : _stripLeadingZeros(b);
-  if (b.isEmpty)
+  }
+  if (b.isEmpty) {
     return _stripLeadingZeros(a).isEmpty ? '0' : _stripLeadingZeros(a);
+  }
   int i = a.length - 1, j = b.length - 1, carry = 0;
   final out = StringBuffer();
 
@@ -91,10 +95,12 @@ String? add27(String a, String b) {
 String? add27Balanced(String a, String b) {
   if (!_valid(a) || !_valid(b)) return null;
   if (a.isEmpty && b.isEmpty) return '0';
-  if (a.isEmpty)
+  if (a.isEmpty) {
     return _stripLeadingZeros(b).isEmpty ? '0' : _stripLeadingZeros(b);
-  if (b.isEmpty)
+  }
+  if (b.isEmpty) {
     return _stripLeadingZeros(a).isEmpty ? '0' : _stripLeadingZeros(a);
+  }
 
   int i = a.length - 1, j = b.length - 1, carry = 0;
   final out = StringBuffer();
@@ -128,10 +134,12 @@ String? add27Balanced(String a, String b) {
 String? add27Cyclic(String a, String b) {
   if (!_valid(a) || !_valid(b)) return null;
   if (a.isEmpty && b.isEmpty) return '0';
-  if (a.isEmpty)
+  if (a.isEmpty) {
     return _stripLeadingZeros(b).isEmpty ? '0' : _stripLeadingZeros(b);
-  if (b.isEmpty)
+  }
+  if (b.isEmpty) {
     return _stripLeadingZeros(a).isEmpty ? '0' : _stripLeadingZeros(a);
+  }
   int i = a.length - 1, j = b.length - 1;
   final out = StringBuffer();
   while (i >= 0 || j >= 0) {

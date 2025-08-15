@@ -1,16 +1,13 @@
 name: livnium_core
 description: A starting point for Dart libraries or applications.
 version: 0.1.0
-# repository: https://github.com/my_org/my_repo
 
 environment:
-  sdk: '>=3.0.0 <4.0.0'
+  sdk: '>=3.3.0 <4.0.0'   # <-- bump to at least 3.3 for extension types
 
-# Add regular dependencies here.
 dependencies:
   args: ^2.7.0
-  js: ^0.7.2
-  # path: ^1.8.0
+  # js: ^0.7.2           # <-- remove; we're using dart:js_interop
 
 dev_dependencies:
   lints: ^6.0.0
