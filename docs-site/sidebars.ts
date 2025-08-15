@@ -31,6 +31,11 @@ const sidebars: SidebarsConfig = {
     },
     {
       type: 'category',
+      label: 'CLI',
+      items: ['cli/overview'],
+    },
+    {
+      type: 'category',
       label: 'Examples',
       items: [
         'examples/encode',
