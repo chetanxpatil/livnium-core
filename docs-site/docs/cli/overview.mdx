@@ -1,0 +1,77 @@
+---
+id: overview
+title: CLI Reference
+sidebar_label: CLI Reference
+---
+
+The Livnium CLI exposes most of the library's functionality from the command line. Source code lives in [`bin/livnium.dart`](../../bin/livnium.dart).
+
+Run it with `dart run bin/livnium.dart` during development or compile it with `dart compile exe bin/livnium.dart -o livnium`.
+
+```bash
+livnium <command> [options]
+```
+
+## Commands
+
+### encode
+```
+livnium encode --codec <csv|fixed|decimal|raw> <word>
+```
+Encode a base‑27 word to the chosen format. `raw` also prints the length for convenience.
+
+### decode
+```
+livnium decode --codec <csv|fixed|decimal|raw> <payload> [--len N]
+```
+Decode a payload back into a word. For `raw` decoding the original length must be supplied via `--len`.
+
+### add
+```
+livnium add --mode <canonical|balanced|cyclic> <a> <b>
+```
+Add two base‑27 words using canonical, balanced, or cyclic arithmetic.
+
+### cs
+```
+livnium cs <a> <b> <c>
+```
+Carry‑save addition of three words. Prints the intermediate sum/carry pair and the finished result.
+
+### energy
+```
+livnium energy <word> [--k]
+```
+Compute word energy in SE9 units or, with `--k`, in K‑units.
+
+### couplers
+```
+livnium couplers [--n N] [--tau0 T] [--alpha A]
+```
+Rank lattice positions by the simple coupling heuristic.
+
+### moves
+```
+livnium moves --seq "U R F' D2"
+```
+Build a permutation for a sequence of face turns and show it applied to indices `0..26`.
+
+### project
+```
+livnium project --radial | --coarse-faces | --drop <x|y|z>
+```
+Project lattice points by L1 shells, exposure classes, or by dropping an axis.
+
+### mapping
+```
+livnium mapping [--mode conventional|harmonic]
+```
+Generate an exposure mapping table.
+
+### validate
+```
+livnium validate
+```
+Run internal self‑checks. Exits with a non‑zero status on failure.
+
+Run `livnium --help` to see this summary from the terminal.
