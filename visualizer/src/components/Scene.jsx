@@ -4,7 +4,7 @@ import { isHiddenByDrop } from '../lib/slicing.js';
 import { Axes } from './Axes.jsx';
 import { Controls } from './Controls.jsx';
 import { Cubelet } from './Cubelet.jsx';
-import { useStore } from '../app/store.js';
+import { useStore } from '../app/store.jsx';
 
 export function Scene({ cubes }) {
   const {

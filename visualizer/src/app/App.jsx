@@ -1,7 +1,7 @@
 import React, { useMemo } from 'react';
 import { Canvas } from '@react-three/fiber';
 import { Scene } from '../components/Scene.jsx';
-import { StoreProvider } from './store.js';
+import { StoreProvider } from './store.jsx';
 import { TopBar } from '../components/TopBar.jsx';
 import { LeftControls } from '../components/LeftControls.jsx';
 import { Insights } from '../components/Insights.jsx';

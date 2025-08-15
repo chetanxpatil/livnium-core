@@ -1,5 +1,5 @@
 import React from 'react';
-import { useStore } from '../app/store.js';
+import { useStore } from '../app/store.jsx';
 
 export function LeftControls() {
   const {

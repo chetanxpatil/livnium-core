@@ -1,5 +1,5 @@
 import React from 'react';
-import { useStore } from '../app/store.js';
+import { useStore } from '../app/store.jsx';
 
 export function BottomStrip() {
   const { mode, alpha, tau0, drop, slice } = useStore();
