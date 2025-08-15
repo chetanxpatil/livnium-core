@@ -1,4 +1,6 @@
 export type CouplerParams = { tau0: number; alpha: number };
+export type Face = 'U' | 'D' | 'L' | 'R' | 'F' | 'B';
+export type FaceMove = { face: Face; quarterTurns: number };
 
 export interface LivniumAPI {
   add27(a: string, b: string): string | null;
@@ -17,8 +19,8 @@ export interface LivniumAPI {
   perFaceUnitEnergy(faces: number): number;
   equilibriumConstant(): number;
 
-  permutationFor(m: { face: string; quarterTurns: number }): number[];
-  applyPerm<T>(arr: T[], perm: number[]): void;
+  permutationFor(m: FaceMove): number[];
+  applyPerm(symbols: number[], perm: number[]): void;
 
   makeCouplerParams(tau0: number, alpha: number): CouplerParams;
   couplingAt(x: number, y: number, z: number, p: CouplerParams): number;
