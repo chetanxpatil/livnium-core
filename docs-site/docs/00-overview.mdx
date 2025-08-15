@@ -1,7 +1,192 @@
+
 ---
 id: overview
 title: Overview
 sidebar_label: Overview
 ---
 
-Livnium Core is a Dart library implementing a 3×3×3 lattice with base‑27 encoding and energy calculations. The public API mirrors exports from `lib/livnium_core.dart`.
+Livnium Core is a small, focused Dart library for working with a **3×3×3 lattice** and a **base-27 alphabet**. It gives you validated conversions between glyphs and digits, positional arithmetic, an energy model (SE9 and K-units), geometric helpers on the cube (exposure and distances), permutation/move utilities, simple coupling heuristics, and optional higher-level pieces like a Potts network and a tree of “micro-cubes”.
+
+At a glance:
+
+- **Alphabet (base-27):** glyphs `0, a..z` ↔ digits `0..26`, fast validation and transforms.
+- **Arithmetic:** positional base-27 ↔ decimal, canonical add, balanced/cyclic modes.
+- **Energy:** per-glyph energy in SE9 or K-units (`K = 10.125`) and totals for words.
+- **Grid & metrics:** 27 coordinates, exposure classes (core/center/edge/corner), `L1/L2/L∞`.
+- **Couplers:** simple distance/exposure-aware ranking of lattice positions.
+- **Moves:** Rubik’s style U/D/L/R/F/B → 27-index permutations; apply to your data.
+- **Projections:** radial shells, axis-drops, and general coarse-graining.
+- **Potts / Tree-CoreBit (optional):** associative memory and hierarchical composition.
+
+> Source API surfaces mirror the exports from `lib/livnium_core.dart`. If you can import it, you can call it from CLI or your Dart app.
+
+---
+
+## Install
+
+Add to your Dart or Flutter project:
+
+```bash
+dart pub add livnium_core
+# or in pubspec.yaml -> dependencies: livnium_core: ^x.y.z
+````
+
+During development inside this repo you can also run the CLI:
+
+```bash
+dart run bin/livnium.dart --help
+# or compile
+dart compile exe bin/livnium.dart -o livnium
+./livnium --help
+```
+
+---
+
+## Quick start (in code)
+
+```dart
+import 'package:livnium_core/livnium_core.dart';
+
+// 1) Alphabet: validate and convert
+final ok = isValidWord('a0z');             // true
+final digits = stringToDigits('a0z');      // [1, 0, 26]
+final word = digitsToString([1, 0, 26]);   // 'a0z'
+
+// 2) Arithmetic: base-27 <-> decimal, plus addition
+final n = toDecimal('a0');                 // 27
+final w = fromDecimal(BigInt.from(28));    // 'aa'
+final sum = add27('z', 'z');               // 'ay'
+
+// 3) Energy: SE9 vs K-units (K=10.125)
+final e9 = wordEnergy9('bny');             // 54
+final ek = wordEnergyK('bny');             // 60.75
+
+// 4) Grid & couplers
+final l1OfFaceCenter = l1(Vec3(1,0,0));    // 1
+final faces = facesForVec3(Vec3(1,0,0));   // 1 (center)
+final top = rankTopCouplers(CouplerParams(tau0: 1.0, alpha: 1.5), 5);
+
+// 5) Moves: build a permutation and apply
+final seq = [FaceMove(Face.U, 1), FaceMove(Face.R, 1), FaceMove(Face.F, -1)];
+var perm = List<int>.generate(27, (i) => i);
+for (final m in seq) {
+  final p = permutationFor(m);
+  final tmp = List<int>.from(perm);
+  for (var i = 0; i < 27; i++) perm[i] = p[tmp[i]];
+}
+final data = List<int>.generate(27, (i) => i);
+applyPerm<int>(data, perm);                // permute 0..26 in-place
+```
+
+---
+
+## Quick start (CLI)
+
+```bash
+# Encode/decode
+livnium encode --codec csv livnium
+livnium decode --codec raw 123456 --len 5
+
+# Arithmetic
+livnium add --mode canonical love love
+livnium cs a b c
+
+# Energy
+livnium energy a0rsw
+livnium energy a0rsw --k
+
+# Couplers & projections
+livnium couplers --n 5 --alpha 1.5
+livnium project --radial
+livnium project --drop z
+livnium project --coarse-faces
+
+# Face moves → permutation
+livnium moves --seq "U R F' D2"
+
+# Sanity checks
+livnium validate
+```
+
+---
+
+## Core ideas
+
+### 1) Alphabet (base-27)
+
+* Digits: `0..26` represented by glyphs `0, a..z`.
+* Every transform is linear‐time in the input length and preserves leading `0`.
+* Start here: **[Alphabet API](/api/alphabet)**
+
+### 2) Grid & exposure
+
+* The cube has 27 integer lattice points with `x,y,z ∈ {−1,0,1}`.
+* Exposure (how many axes are non-zero) defines classes:
+
+  * core `(0 faces)`, center `(1)`, edge `(2)`, corner `(3)`.
+* Distances: `L1`, `L2`, and `L∞` are provided.
+* See: **[Grid API](/api/grid)** • **[Concepts: Grid & metrics](/concepts/grid-and-metrics)**
+
+### 3) Energy model
+
+* **SE9 scale:** 9 per face → center 9, edge 18, corner 27.
+* **K-units:** `K = 10.125` so center 1K, edge 2K, corner 3K.
+* Word energy is the sum of per-glyph class energies.
+* See: **[Energy API](/api/energy)** • **[Concepts: Energy model](/concepts/energy-model)**
+
+### 4) Couplers
+
+* Heuristic magnitude `C(v)` increases with exposure and decreases with distance.
+* Tuned by `tau0` (amplitude) and `alpha` (distance falloff).
+* See: **[Coupler API](/api/coupler)** • **[Examples: Coupler](/examples/coupler)**
+
+### 5) Moves & permutations
+
+* Standard cube notation (`U, D, L, R, F, B`) maps to permutations of 27 indices.
+* Compose permutations and apply to any 27-length data.
+* See: **[Rotation & Moves API](/api/rotation-moves)** • **[Examples: Moves](/examples/moves)**
+
+### 6) Projections
+
+* `radialBins()` groups by `L1` shells.
+* `dropAxis('x'|'y'|'z')` buckets by the remaining two axes.
+* `coarseGrain(keyFn)` builds custom partitions.
+* See: **[Projection API](/api/projection)** • **[Examples: Projections](/examples/projections)**
+
+### 7) Optional higher-level pieces
+
+* **Potts27:** 27-state associative memory with pluggable kernel, relax/update.
+* **Tree & CoreBit:** hierarchical composition of 27-ary micro-cubes; small biased unit for local relaxation.
+* See: **[Potts API](/api/potts)** • **[Tree & CoreBit API](/api/tree-corebit)**
+
+---
+
+## Choosing a codec
+
+| Use case                         | Codec       | Notes                                                    |
+| -------------------------------- | ----------- | -------------------------------------------------------- |
+| Human-readable fixed digits      | **CSV**     | e.g., `1,0,26`; easy to diff; round-trips cleanly        |
+| Compact text with fixed width    | **fixed**   | no separators; pad yourself if you need width guarantees |
+| Decimal number for interop       | **decimal** | sentinel encoding to preserve leading zeros              |
+| Raw `BigInt` for max compactness | **raw**     | pass `--len` (or store length) to decode unambiguously   |
+
+See **Codecs** details on the Alphabet and CLI pages.
+
+---
+
+## Invariants & gotchas
+
+* Uppercase glyphs are **invalid**; the alphabet is case-sensitive.
+* Keep your **27-slot indexing** consistent across modules. Most code assumes the same enumeration as `cube3Coords()`.
+* If you need **stable fixed-width** strings, choose a codec that enforces it (CSV/fixed) or pad at the application layer.
+* The core `(0,0,0)` contributes **zero** energy and is excluded from coupler rankings.
+
+---
+
+## What to read next
+
+* **Concepts →** [Alphabet](/concepts/alphabet), [Grid & metrics](/concepts/grid-and-metrics), [Energy model](/concepts/energy-model)
+* **API →** [Alphabet](/api/alphabet), [Arithmetic](/api/arith27), [Energy](/api/energy), [Grid](/api/grid), [Coupler](/api/coupler), [Rotation & Moves](/api/rotation-moves), [Projection](/api/projection), [Potts](/api/potts), [Tree & CoreBit](/api/tree-corebit)
+* **Examples →** [Encode](/examples/encode), [Energy demo](/examples/energy-demo), [Moves](/examples/moves), [Projections](/examples/projections)
+
+```

@@ -1,15 +1,97 @@
-# Encode & number formats
 
-Output from `encode_demo.dart`:
+---
+id: encode
+title: Encode & number formats
+sidebar_label: Encode & number formats
+---
 
-```text
-word  csv  fixed  big  dec  raw
----------------------------------------------
-0   0   00   1   1   0
-a   1   01   28   28   1
-a0   1,0   0100   731   731   27
-xyz   24,25,26   242526   491322   491322   18197
-000   0,0,0   000000   3   3   0
-livnium   12,9,22,14,9,21,13   12092214092113   129334331779   129334331779   4790160436
-0az   0,1,26   000126   1434   1434   53
+This example shows how the same base-27 **word** can be represented in several formats. Use this as a quick reference when choosing an interchange format for files, logs, or CLIs.
+
+## What each column means
+
+- **csv** – Comma-separated digits (`0..26`). Human-readable, round-trips cleanly.
+- **fixed** – Two decimal digits per symbol (`00..26`). Preserves length and leading `0`s.
+- **big / dec** – Decimal **BigInt** using Livnium’s **sentinel decimal** scheme that preserves leading zeros (safe to parse as a number).
+  Use `encodeDecimal(word)` / `decodeDecimal(payload)`.
+- **raw** – Positional base-27 value as a **BigInt** (compact).
+  Requires **length** to decode unambiguously when leading `0`s are present; use `encodeBigIntRaw(word)` / `decodeBigIntRaw(n, length: ...)`.
+
+---
+
+## Output from `encode_demo.dart`
+
+| word      | csv                  | fixed            | big            | dec            | raw          |
+| --------- | -------------------- | ---------------- | -------------- | -------------- | ------------ |
+| `0`       | `0`                  | `00`             | `1`            | `1`            | `0`          |
+| `a`       | `1`                  | `01`             | `28`           | `28`           | `1`          |
+| `a0`      | `1,0`                | `0100`           | `731`          | `731`          | `27`         |
+| `xyz`     | `24,25,26`           | `242526`         | `491322`       | `491322`       | `18197`      |
+| `000`     | `0,0,0`              | `000000`         | `3`            | `3`            | `0`          |
+| `livnium` | `12,9,22,14,9,21,13` | `12092214092113` | `129334331779` | `129334331779` | `4790160436` |
+| `0az`     | `0,1,26`             | `000126`         | `1434`         | `1434`         | `53`         |
+
+
+> Notes
+>
+> * `raw` is the true base-27 numeric value; it collapses leading `0`s (`'000' → 0`).
+> * `big/dec` retain length information via the sentinel scheme, so `'0'` and `'000'` map to different decimal values.
+> * `fixed` is great for fixed-width displays and lexicographic sorting; every symbol contributes exactly two digits.
+
+---
+
+## Reproduce it (library)
+
+```dart
+import 'package:livnium_core/livnium_core.dart';
+
+void main() {
+  final words = [
+    '0',
+    'a',
+    'a0',
+    'xyz',
+    '000',
+    'livnium',
+    '0az',
+  ];
+
+  print('word  csv  fixed  big  dec  raw');
+  print('---------------------------------------------');
+
+  for (final w in words) {
+    final csv   = encodeCsv(w) ?? 'ERR';
+    final fixed = encodeFixed(w) ?? 'ERR';
+    final dec   = encodeDecimal(w) ?? 'ERR';
+    final raw   = encodeBigIntRaw(w)?.toString() ?? 'ERR';
+    print('$w   $csv   $fixed   $dec   $dec   $raw');
+  }
+}
+```
+
+## Reproduce it (CLI)
+
+```bash
+# One-offs
+livnium encode --codec csv livnium
+livnium encode --codec fixed livnium
+livnium encode --codec decimal livnium
+livnium encode --codec raw livnium
+
+# Round-trip raw (must pass length)
+livnium decode --codec raw 4790160436 --len 7
+```
+
+---
+
+## When to use which
+
+| Need                                                          | Pick      |
+| ------------------------------------------------------------- | --------- |
+| Human-readable, easy to diff                                  | **csv**   |
+| Fixed width; preserve length                                  | **fixed** |
+| Numeric payload that still preserves leading `0`s             | **dec**   |
+| Max compactness as a number (you can carry length separately) | **raw**   |
+
+See also: **[Alphabet API](/api/alphabet)** • **[Arithmetic API](/api/arith27)** • **[CLI](/cli)**
+
 ```
