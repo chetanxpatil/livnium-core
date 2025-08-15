@@ -1,77 +1,219 @@
+
 ---
 id: overview
 title: CLI Reference
 sidebar_label: CLI Reference
 ---
 
-The Livnium CLI exposes most of the library's functionality from the command line. Source code lives in [`bin/livnium.dart`](../../bin/livnium.dart).
+Meet the **Livnium CLI** — a friendly command-line wrapper around the Livnium Core library.
+If you can call it from Dart, you can usually do it here with a flag or two.
 
-Run it with `dart run bin/livnium.dart` during development or compile it with `dart compile exe bin/livnium.dart -o livnium`.
+> Source: [`bin/livnium.dart`](../../bin/livnium.dart)
+
+---
+
+## Quick start
+
+```bash
+# From the repo root (development)
+dart pub get
+dart run bin/livnium.dart --help
+
+# Optional: build a native binary
+dart compile exe bin/livnium.dart -o livnium
+./livnium --help
+````
+
+Basic usage:
 
 ```bash
 livnium <command> [options]
 ```
 
-## Commands
+---
 
-### encode
-```
+## One-minute tour (cheat sheet)
+
+| Command    | What it does                                      | Quick example                                   |
+| ---------- | ------------------------------------------------- | ----------------------------------------------- |
+| `encode`   | Convert a base-27 **word** into another format    | `livnium encode --codec csv livnium`            |
+| `decode`   | Convert **from** a format back to a word          | `livnium decode --codec raw 4790160436 --len 7` |
+| `add`      | Add two words (canonical/balanced/cyclic)         | `livnium add --mode canonical a0 z`             |
+| `cs`       | Carry-save add of three words                     | `livnium cs a b c`                              |
+| `energy`   | Word energy (SE9 or **K** with `--k`)             | `livnium energy a0rsw --k`                      |
+| `couplers` | Rank lattice positions by coupling                | `livnium couplers --n 5 --alpha 1.5`            |
+| `moves`    | Build/apply permutation from face turns           | `livnium moves --seq "U R F' D2"`               |
+| `project`  | Bucket coordinates (radial / faces / drop axis)   | `livnium project --drop z`                      |
+| `mapping`  | Generate exposure mapping (conventional/harmonic) | `livnium mapping --mode harmonic`               |
+| `validate` | Run internal self-checks                          | `livnium validate`                              |
+
+---
+
+## Encoders & decoders
+
+### `encode`
+
+```bash
 livnium encode --codec <csv|fixed|decimal|raw> <word>
 ```
-Encode a base‑27 word to the chosen format. `raw` also prints the length for convenience.
 
-### decode
+**Pick a format:**
+
+* `csv` → human-readable digits: `a0z` → `1,0,26`
+* `fixed` → two digits per symbol: `a0z` → `010026`  *(preserves length)*
+* `decimal` (**dec**) → length-preserving decimal BigInt: `a0` → `731`
+* `raw` → pure base-27 value: `a0` → `27`
+
+\:::caution RAW decoding needs length
+`raw` collapses leading `0`s. To decode, pass the original length:
+
+```bash
+livnium decode --codec raw 27 --len 2   # -> 'a0'
 ```
+
+\:::
+
+### `decode`
+
+```bash
 livnium decode --codec <csv|fixed|decimal|raw> <payload> [--len N]
 ```
-Decode a payload back into a word. For `raw` decoding the original length must be supplied via `--len`.
 
-### add
+Examples:
+
+```bash
+livnium decode --codec csv "1,0,26"      # a0z
+livnium decode --codec fixed 010026      # a0z
+livnium decode --codec decimal 731       # a0
+livnium decode --codec raw 53 --len 3    # 0az
 ```
+
+---
+
+## Arithmetic
+
+### `add` (canonical/balanced/cyclic)
+
+```bash
 livnium add --mode <canonical|balanced|cyclic> <a> <b>
 ```
-Add two base‑27 words using canonical, balanced, or cyclic arithmetic.
 
-### cs
-```
+* **canonical**: normal addition with carries
+* **balanced**: uses centered digits to keep results near zero
+* **cyclic**: per-digit mod-27, **no carries**
+
+### `cs` (carry-save, three inputs)
+
+```bash
 livnium cs <a> <b> <c>
 ```
-Carry‑save addition of three words. Prints the intermediate sum/carry pair and the finished result.
 
-### energy
-```
+Prints `sum=... carry=... final=...` where `final` is the resolved result.
+
+---
+
+## Energy
+
+### `energy`
+
+```bash
 livnium energy <word> [--k]
 ```
-Compute word energy in SE9 units or, with `--k`, in K‑units.
 
-### couplers
+* Default: **SE9** scale (center=9, edge=18, corner=27; core=0)
+* With `--k`: **K-units** using `K = 10.125` (center=1K, edge=2K, corner=3K)
+
+Examples:
+
+```bash
+livnium energy bny          # 54
+livnium energy bny --k      # 60.75
 ```
+
+---
+
+## Geometry & coupling
+
+### `couplers`
+
+```bash
 livnium couplers [--n N] [--tau0 T] [--alpha A]
 ```
-Rank lattice positions by the simple coupling heuristic.
 
-### moves
+Ranks non-core positions by a simple exposure- and distance-aware model.
+Useful to see which lattice points “influence” most under your parameters.
+
+Example:
+
+```bash
+livnium couplers --n 5 --alpha 1.5
 ```
+
+---
+
+## Moves & permutations
+
+### `moves`
+
+```bash
 livnium moves --seq "U R F' D2"
 ```
-Build a permutation for a sequence of face turns and show it applied to indices `0..26`.
 
-### project
-```
+* Faces: `U D L R F B`
+* Suffix: `'(prime)` = counter-clockwise, `2` = half-turn, none = clockwise
+  Emits the **27-index permutation** and shows it applied to `[0..26]`.
+
+---
+
+## Projections & mapping
+
+### `project`
+
+```bash
 livnium project --radial | --coarse-faces | --drop <x|y|z>
 ```
-Project lattice points by L1 shells, exposure classes, or by dropping an axis.
 
-### mapping
-```
+* `--radial` → L1 shells (0..3)
+* `--coarse-faces` → exposure classes (0..3)
+* `--drop <axis>` → bucket by the other two axes
+
+### `mapping`
+
+```bash
 livnium mapping [--mode conventional|harmonic]
 ```
-Generate an exposure mapping table.
 
-### validate
-```
+Outputs `symbol,faces,side` for your mapping strategy.
+
+---
+
+## Validation
+
+### `validate`
+
+```bash
 livnium validate
 ```
-Run internal self‑checks. Exits with a non‑zero status on failure.
 
-Run `livnium --help` to see this summary from the terminal.
+Runs internal self-checks (alphabet/codec round-trips, rotations, grid counts, energy constants).
+Exits **0** on success, **1** on failure.
+
+---
+
+## Tips & common pitfalls
+
+* **Quotes matter** for move sequences: `--seq "U R F' D2"`.
+* **RAW needs `--len`** to decode correctly when leading `0`s exist.
+* The alphabet is **case-sensitive**: `'A'` is invalid.
+* Everything assumes the same 27-slot ordering (the one used by `cube3Coords()`).
+
+---
+
+## See also
+
+* **[Alphabet API](/api/alphabet)** — glyphs and validation
+* **[Arithmetic API](/api/arith27)** — conversions and addition modes
+* **[Energy API](/api/energy)** — SE9 vs K
+* **[Grid API](/api/grid)** — coordinates & distances
+* **[Rotation & Moves](/api/rotation-moves)** • **[Projection](/api/projection)** • **[Coupler](/api/coupler)**
+```
