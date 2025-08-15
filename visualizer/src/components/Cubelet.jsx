@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import React, { useMemo } from 'react';
 import { NameSprite } from './NameSprite.jsx';
 import { colorByExposure, colorByCoupler } from '../lib/colors.js';
 import { faceLetterFor } from '../lib/faces.js';

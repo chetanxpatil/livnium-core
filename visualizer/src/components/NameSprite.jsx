@@ -1,4 +1,4 @@
-import { useMemo, useEffect } from 'react';
+import React, { useMemo, useEffect } from 'react';
 import * as THREE from 'three';
 
 export function NameSprite({

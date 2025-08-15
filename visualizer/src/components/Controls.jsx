@@ -1,5 +1,5 @@
 import { useThree, useFrame } from '@react-three/fiber';
-import { useEffect, useRef } from 'react';
+import  React, { useEffect, useRef } from 'react';
 import { OrbitControls as ThreeOrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 
 export function Controls({ enablePan = true, enableZoom = true, enableRotate = true }) {
