@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useState } from 'react';
+import { createPotts27 } from '../lib/potts27.js';
 
 const StoreContext = createContext();
 
@@ -12,6 +13,9 @@ export function StoreProvider({ children }) {
   const [labelMode, setLabelMode] = useState('xyz');
   const [selection, setSelection] = useState(null);
   const [showAxes, setShowAxes] = useState(true);
+  const [pottsModel, setPottsModel] = useState(createPotts27(3));
+  const [temperature, setTemperature] = useState(1);
+  const [isPottsRunning, setIsPottsRunning] = useState(false);
 
   const reset = () => {
     setMode('exposure');
@@ -23,6 +27,10 @@ export function StoreProvider({ children }) {
     setLabelMode('xyz');
     setSelection(null);
     setShowAxes(true);
+  };
+
+  const resetPotts = () => {
+    setPottsModel(createPotts27(3));
   };
 
   const value = {
@@ -44,6 +52,13 @@ export function StoreProvider({ children }) {
     setSelection,
     showAxes,
     setShowAxes,
+    pottsModel,
+    setPottsModel,
+    temperature,
+    setTemperature,
+    isPottsRunning,
+    setIsPottsRunning,
+    resetPotts,
     reset,
   };
 

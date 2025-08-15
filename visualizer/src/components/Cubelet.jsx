@@ -1,36 +1,16 @@
 import React, { useMemo } from 'react';
 import { NameSprite } from './NameSprite.jsx';
-import { colorByExposure, colorByCoupler } from '../lib/colors.js';
-import { faceLetterFor } from '../lib/faces.js';
+import { useStore } from '../app/store.jsx';
+import { stateSymbol, symbolColor } from '../lib/potts27.js';
 
-export function Cubelet({
-  pos,
-  labelMode,
-  showNames,
-  mode,
-  alpha,
-  tau0,
-  hidden,
-  shared,
-}) {
+export function Cubelet({ pos, showNames, hidden, shared }) {
   const spacing = 1.1;
   const size = 0.9;
-
-  const color = useMemo(
-    () =>
-      mode === 'exposure'
-        ? colorByExposure(pos)
-        : colorByCoupler(pos, alpha, tau0),
-    [pos, mode, alpha, tau0],
-  );
-
-  const xyzLabel = `${pos.x},${pos.y},${pos.z}`;
-  const textForSide = useMemo(() => {
-    if (labelMode === 'face') {
-      return (axis, sign) => faceLetterFor(pos, axis, sign);
-    }
-    return () => xyzLabel;
-  }, [labelMode, pos.x, pos.y, pos.z, xyzLabel]);
+  const { pottsModel } = useStore();
+  const state = pottsModel.states[pos.x + 1][pos.y + 1][pos.z + 1];
+  const color = useMemo(() => symbolColor(state), [state]);
+  const symbol = stateSymbol(state);
+  const textForSide = () => symbol;
 
   return (
     <group
@@ -46,7 +26,7 @@ export function Cubelet({
           pos={pos}
           cubeSize={size}
           textForSide={textForSide}
-          depsKey={labelMode}
+          depsKey={symbol}
         />
       ) : null}
     </group>
