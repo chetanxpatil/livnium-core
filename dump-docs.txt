@@ -1,0 +1,1615 @@
+//// BEGIN FILE: docs-site/docs/00-overview.mdx
+
+---
+id: overview
+title: Overview
+sidebar_label: Overview
+---
+
+Livnium Core is a small, focused Dart library for working with a **3×3×3 lattice** and a **base-27 alphabet**. It gives you validated conversions between glyphs and digits, positional arithmetic, an energy model (SE9 and K-units), geometric helpers on the cube (exposure and distances), permutation/move utilities, simple coupling heuristics, and optional higher-level pieces like a Potts network and a tree of “micro-cubes”.
+
+At a glance:
+
+- **Alphabet (base-27):** glyphs `0, a..z` ↔ digits `0..26`, fast validation and transforms.
+- **Arithmetic:** positional base-27 ↔ decimal, canonical add, balanced/cyclic modes.
+- **Energy:** per-glyph energy in SE9 or K-units (`K = 10.125`) and totals for words.
+- **Grid & metrics:** 27 coordinates, exposure classes (core/center/edge/corner), `L1/L2/L∞`.
+- **Couplers:** simple distance/exposure-aware ranking of lattice positions.
+- **Moves:** Rubik’s style U/D/L/R/F/B → 27-index permutations; apply to your data.
+- **Projections:** radial shells, axis-drops, and general coarse-graining.
+- **Potts / Tree-CoreBit (optional):** associative memory and hierarchical composition.
+
+> Source API surfaces mirror the exports from `lib/livnium_core.dart`. If you can import it, you can call it from CLI or your Dart app.
+
+---
+
+## Install
+
+Add to your Dart or Flutter project:
+
+```bash
+dart pub add livnium_core
+# or in pubspec.yaml -> dependencies: livnium_core: ^x.y.z
+````
+
+During development inside this repo you can also run the CLI:
+
+```bash
+dart run bin/livnium.dart --help
+# or compile
+dart compile exe bin/livnium.dart -o livnium
+./livnium --help
+```
+
+---
+
+## Quick start (in code)
+
+```dart
+import 'package:livnium_core/livnium_core.dart';
+
+// 1) Alphabet: validate and convert
+final ok = isValidWord('a0z');             // true
+final digits = stringToDigits('a0z');      // [1, 0, 26]
+final word = digitsToString([1, 0, 26]);   // 'a0z'
+
+// 2) Arithmetic: base-27 <-> decimal, plus addition
+final n = toDecimal('a0');                 // 27
+final w = fromDecimal(BigInt.from(28));    // 'aa'
+final sum = add27('z', 'z');               // 'ay'
+
+// 3) Energy: SE9 vs K-units (K=10.125)
+final e9 = wordEnergy9('bny');             // 54
+final ek = wordEnergyK('bny');             // 60.75
+
+// 4) Grid & couplers
+final l1OfFaceCenter = l1(Vec3(1,0,0));    // 1
+final faces = facesForVec3(Vec3(1,0,0));   // 1 (center)
+final top = rankTopCouplers(CouplerParams(tau0: 1.0, alpha: 1.5), 5);
+
+// 5) Moves: build a permutation and apply
+final seq = [FaceMove(Face.U, 1), FaceMove(Face.R, 1), FaceMove(Face.F, -1)];
+var perm = List<int>.generate(27, (i) => i);
+for (final m in seq) {
+  final p = permutationFor(m);
+  final tmp = List<int>.from(perm);
+  for (var i = 0; i < 27; i++) perm[i] = p[tmp[i]];
+}
+final data = List<int>.generate(27, (i) => i);
+applyPerm<int>(data, perm);                // permute 0..26 in-place
+```
+
+---
+
+## Quick start (CLI)
+
+```bash
+# Encode/decode
+livnium encode --codec csv livnium
+livnium decode --codec raw 123456 --len 5
+
+# Arithmetic
+livnium add --mode canonical love love
+livnium cs a b c
+
+# Energy
+livnium energy a0rsw
+livnium energy a0rsw --k
+
+# Couplers & projections
+livnium couplers --n 5 --alpha 1.5
+livnium project --radial
+livnium project --drop z
+livnium project --coarse-faces
+
+# Face moves → permutation
+livnium moves --seq "U R F' D2"
+
+# Sanity checks
+livnium validate
+```
+
+---
+
+## Core ideas
+
+### 1) Alphabet (base-27)
+
+* Digits: `0..26` represented by glyphs `0, a..z`.
+* Every transform is linear‐time in the input length and preserves leading `0`.
+* Start here: **[Alphabet API](/api/alphabet)**
+
+### 2) Grid & exposure
+
+* The cube has 27 integer lattice points with `x,y,z ∈ {−1,0,1}`.
+* Exposure (how many axes are non-zero) defines classes:
+
+  * core `(0 faces)`, center `(1)`, edge `(2)`, corner `(3)`.
+* Distances: `L1`, `L2`, and `L∞` are provided.
+* See: **[Grid API](/api/grid)** • **[Concepts: Grid & metrics](/concepts/grid-and-metrics)**
+
+### 3) Energy model
+
+* **SE9 scale:** 9 per face → center 9, edge 18, corner 27.
+* **K-units:** `K = 10.125` so center 1K, edge 2K, corner 3K.
+* Word energy is the sum of per-glyph class energies.
+* See: **[Energy API](/api/energy)** • **[Concepts: Energy model](/concepts/energy-model)**
+
+### 4) Couplers
+
+* Heuristic magnitude `C(v)` increases with exposure and decreases with distance.
+* Tuned by `tau0` (amplitude) and `alpha` (distance falloff).
+* See: **[Coupler API](/api/coupler)** • **[Examples: Coupler](/examples/coupler)**
+
+### 5) Moves & permutations
+
+* Standard cube notation (`U, D, L, R, F, B`) maps to permutations of 27 indices.
+* Compose permutations and apply to any 27-length data.
+* See: **[Rotation & Moves API](/api/rotation-moves)** • **[Examples: Moves](/examples/moves)**
+
+### 6) Projections
+
+* `radialBins()` groups by `L1` shells.
+* `dropAxis('x'|'y'|'z')` buckets by the remaining two axes.
+* `coarseGrain(keyFn)` builds custom partitions.
+* See: **[Projection API](/api/projection)** • **[Examples: Projections](/examples/projections)**
+
+### 7) Optional higher-level pieces
+
+* **Potts27:** 27-state associative memory with pluggable kernel, relax/update.
+* **Tree & CoreBit:** hierarchical composition of 27-ary micro-cubes; small biased unit for local relaxation.
+* See: **[Potts API](/api/potts)** • **[Tree & CoreBit API](/api/tree-corebit)**
+
+---
+
+## Choosing a codec
+
+| Use case                         | Codec       | Notes                                                    |
+| -------------------------------- | ----------- | -------------------------------------------------------- |
+| Human-readable fixed digits      | **CSV**     | e.g., `1,0,26`; easy to diff; round-trips cleanly        |
+| Compact text with fixed width    | **fixed**   | no separators; pad yourself if you need width guarantees |
+| Decimal number for interop       | **decimal** | sentinel encoding to preserve leading zeros              |
+| Raw `BigInt` for max compactness | **raw**     | pass `--len` (or store length) to decode unambiguously   |
+
+See **Codecs** details on the Alphabet and CLI pages.
+
+---
+
+## Invariants & gotchas
+
+* Uppercase glyphs are **invalid**; the alphabet is case-sensitive.
+* Keep your **27-slot indexing** consistent across modules. Most code assumes the same enumeration as `cube3Coords()`.
+* If you need **stable fixed-width** strings, choose a codec that enforces it (CSV/fixed) or pad at the application layer.
+* The core `(0,0,0)` contributes **zero** energy and is excluded from coupler rankings.
+
+---
+
+## What to read next
+
+* **Concepts →** [Alphabet](/concepts/alphabet), [Grid & metrics](/concepts/grid-and-metrics), [Energy model](/concepts/energy-model)
+* **API →** [Alphabet](/api/alphabet), [Arithmetic](/api/arith27), [Energy](/api/energy), [Grid](/api/grid), [Coupler](/api/coupler), [Rotation & Moves](/api/rotation-moves), [Projection](/api/projection), [Potts](/api/potts), [Tree & CoreBit](/api/tree-corebit)
+* **Examples →** [Encode](/examples/encode), [Energy demo](/examples/energy-demo), [Moves](/examples/moves), [Projections](/examples/projections)
+
+```
+
+//// END FILE: docs-site/docs/00-overview.mdx
+
+//// BEGIN FILE: docs-site/docs/cli/overview.mdx
+
+---
+id: overview
+title: CLI Reference
+sidebar_label: CLI Reference
+---
+
+Meet the **Livnium CLI** — a friendly command-line wrapper around the Livnium Core library.
+If you can call it from Dart, you can usually do it here with a flag or two.
+
+> Source: [`bin/livnium.dart`](../../bin/livnium.dart)
+
+---
+
+## Quick start
+
+```bash
+# From the repo root (development)
+dart pub get
+dart run bin/livnium.dart --help
+
+# Optional: build a native binary
+dart compile exe bin/livnium.dart -o livnium
+./livnium --help
+````
+
+Basic usage:
+
+```bash
+livnium <command> [options]
+```
+
+---
+
+## One-minute tour (cheat sheet)
+
+| Command    | What it does                                      | Quick example                                   |
+| ---------- | ------------------------------------------------- | ----------------------------------------------- |
+| `encode`   | Convert a base-27 **word** into another format    | `livnium encode --codec csv livnium`            |
+| `decode`   | Convert **from** a format back to a word          | `livnium decode --codec raw 4790160436 --len 7` |
+| `add`      | Add two words (canonical/balanced/cyclic)         | `livnium add --mode canonical a0 z`             |
+| `cs`       | Carry-save add of three words                     | `livnium cs a b c`                              |
+| `energy`   | Word energy (SE9 or **K** with `--k`)             | `livnium energy a0rsw --k`                      |
+| `couplers` | Rank lattice positions by coupling                | `livnium couplers --n 5 --alpha 1.5`            |
+| `moves`    | Build/apply permutation from face turns           | `livnium moves --seq "U R F' D2"`               |
+| `project`  | Bucket coordinates (radial / faces / drop axis)   | `livnium project --drop z`                      |
+| `mapping`  | Generate exposure mapping (conventional/harmonic) | `livnium mapping --mode harmonic`               |
+| `validate` | Run internal self-checks                          | `livnium validate`                              |
+
+---
+
+## Encoders & decoders
+
+### `encode`
+
+```bash
+livnium encode --codec <csv|fixed|decimal|raw> <word>
+```
+
+**Pick a format:**
+
+* `csv` → human-readable digits: `a0z` → `1,0,26`
+* `fixed` → two digits per symbol: `a0z` → `010026`  *(preserves length)*
+* `decimal` (**dec**) → length-preserving decimal BigInt: `a0` → `731`
+* `raw` → pure base-27 value: `a0` → `27`
+
+\:::caution RAW decoding needs length
+`raw` collapses leading `0`s. To decode, pass the original length:
+
+```bash
+livnium decode --codec raw 27 --len 2   # -> 'a0'
+```
+
+\:::
+
+### `decode`
+
+```bash
+livnium decode --codec <csv|fixed|decimal|raw> <payload> [--len N]
+```
+
+Examples:
+
+```bash
+livnium decode --codec csv "1,0,26"      # a0z
+livnium decode --codec fixed 010026      # a0z
+livnium decode --codec decimal 731       # a0
+livnium decode --codec raw 53 --len 3    # 0az
+```
+
+---
+
+## Arithmetic
+
+### `add` (canonical/balanced/cyclic)
+
+```bash
+livnium add --mode <canonical|balanced|cyclic> <a> <b>
+```
+
+* **canonical**: normal addition with carries
+* **balanced**: uses centered digits to keep results near zero
+* **cyclic**: per-digit mod-27, **no carries**
+
+### `cs` (carry-save, three inputs)
+
+```bash
+livnium cs <a> <b> <c>
+```
+
+Prints `sum=... carry=... final=...` where `final` is the resolved result.
+
+---
+
+## Energy
+
+### `energy`
+
+```bash
+livnium energy <word> [--k]
+```
+
+* Default: **SE9** scale (center=9, edge=18, corner=27; core=0)
+* With `--k`: **K-units** using `K = 10.125` (center=1K, edge=2K, corner=3K)
+
+Examples:
+
+```bash
+livnium energy bny          # 54
+livnium energy bny --k      # 60.75
+```
+
+---
+
+## Geometry & coupling
+
+### `couplers`
+
+```bash
+livnium couplers [--n N] [--tau0 T] [--alpha A]
+```
+
+Ranks non-core positions by a simple exposure- and distance-aware model.
+Useful to see which lattice points “influence” most under your parameters.
+
+Example:
+
+```bash
+livnium couplers --n 5 --alpha 1.5
+```
+
+---
+
+## Moves & permutations
+
+### `moves`
+
+```bash
+livnium moves --seq "U R F' D2"
+```
+
+* Faces: `U D L R F B`
+* Suffix: `'(prime)` = counter-clockwise, `2` = half-turn, none = clockwise
+  Emits the **27-index permutation** and shows it applied to `[0..26]`.
+
+---
+
+## Projections & mapping
+
+### `project`
+
+```bash
+livnium project --radial | --coarse-faces | --drop <x|y|z>
+```
+
+* `--radial` → L1 shells (0..3)
+* `--coarse-faces` → exposure classes (0..3)
+* `--drop <axis>` → bucket by the other two axes
+
+### `mapping`
+
+```bash
+livnium mapping [--mode conventional|harmonic]
+```
+
+Outputs `symbol,faces,side` for your mapping strategy.
+
+---
+
+## Validation
+
+### `validate`
+
+```bash
+livnium validate
+```
+
+Runs internal self-checks (alphabet/codec round-trips, rotations, grid counts, energy constants).
+Exits **0** on success, **1** on failure.
+
+---
+
+## Tips & common pitfalls
+
+* **Quotes matter** for move sequences: `--seq "U R F' D2"`.
+* **RAW needs `--len`** to decode correctly when leading `0`s exist.
+* The alphabet is **case-sensitive**: `'A'` is invalid.
+* Everything assumes the same 27-slot ordering (the one used by `cube3Coords()`).
+
+---
+
+## See also
+
+* **[Alphabet API](/api/alphabet)** — glyphs and validation
+* **[Arithmetic API](/api/arith27)** — conversions and addition modes
+* **[Energy API](/api/energy)** — SE9 vs K
+* **[Grid API](/api/grid)** — coordinates & distances
+* **[Rotation & Moves](/api/rotation-moves)** • **[Projection](/api/projection)** • **[Coupler](/api/coupler)**
+```
+
+//// END FILE: docs-site/docs/cli/overview.mdx
+
+//// BEGIN FILE: docs-site/docs/01-getting-started.mdx
+---
+id: getting-started
+title: Getting Started
+sidebar_label: Getting Started
+---
+
+Install the package and run a minimal program:
+
+```dart
+import 'package:livnium_core/livnium_core.dart';
+
+void main() {
+  print(equilibriumConstant); // 10.125
+}
+```
+
+//// END FILE: docs-site/docs/01-getting-started.mdx
+
+//// BEGIN FILE: docs-site/docs/examples/projections.mdx
+# Projections
+
+Output from `projection_demo.dart`:
+
+```text
+Coarse by faces:
+faces=3 -> 8
+faces=2 -> 12
+faces=1 -> 6
+faces=0 -> 1
+
+Radial bins L1:
+L=3 -> 8 points
+L=2 -> 12 points
+L=1 -> 6 points
+L=0 -> 1 points
+
+Radial bins L∞ (Chebyshev):
+L∞=1 -> 26 points
+L∞=0 -> 1 points
+
+Radial bins L2 (rounded):
+L2≈2 -> 8 points
+L2≈1 -> 18 points
+L2≈0 -> 1 points
+
+Slices after dropping Z:
+key=(-1, -1)  count=3
+key=(0, -1)  count=3
+key=(1, -1)  count=3
+key=(-1, 0)  count=3
+key=(0, 0)  count=3
+key=(1, 0)  count=3
+key=(-1, 1)  count=3
+key=(0, 1)  count=3
+key=(1, 1)  count=3
+
+Slices after dropping X:
+key=(-1, -1)  count=3
+key=(0, -1)  count=3
+key=(1, -1)  count=3
+key=(-1, 0)  count=3
+key=(0, 0)  count=3
+key=(1, 0)  count=3
+key=(-1, 1)  count=3
+key=(0, 1)  count=3
+key=(1, 1)  count=3
+
+Slices after dropping Y:
+key=(-1, -1)  count=3
+key=(0, -1)  count=3
+key=(1, -1)  count=3
+key=(-1, 0)  count=3
+key=(0, 0)  count=3
+key=(1, 0)  count=3
+key=(-1, 1)  count=3
+key=(0, 1)  count=3
+key=(1, 1)  count=3
+```
+
+//// END FILE: docs-site/docs/examples/projections.mdx
+
+//// BEGIN FILE: docs-site/docs/examples/coupler.mdx
+# Coupler & interference
+
+`coupler_demo.dart` shows top couplers:
+
+```text
+Top couplers (alpha=1.0):
+pos=(-1,0,0)  C=10.125000  L=1  faces=1
+pos=(0,-1,0)  C=10.125000  L=1  faces=1
+pos=(0,0,-1)  C=10.125000  L=1  faces=1
+pos=(0,0,1)  C=10.125000  L=1  faces=1
+pos=(0,1,0)  C=10.125000  L=1  faces=1
+pos=(1,0,0)  C=10.125000  L=1  faces=1
+pos=(-1,-1,0)  C=2.531250  L=2  faces=2
+pos=(-1,0,-1)  C=2.531250  L=2  faces=2
+pos=(-1,0,1)  C=2.531250  L=2  faces=2
+pos=(-1,1,0)  C=2.531250  L=2  faces=2
+
+Average C by class (alpha=1.0): F=10.125000  E=2.531250  C=1.125000
+
+Phasor sum over L1=1 face centers: |R|=0.000000
+```
+
+`interference_demo.dart` sweeps phase:
+
+```text
+0,20.25
+15,20.076758442819663
+30,19.559997982353632
+45,18.70856053335356
+60,17.537014426634883
+75,16.065405140897514
+90,14.318912319027588
+105,12.327418937426591
+120,10.125000000000002
+135,7.749339505393068
+150,5.241085663326045
+165,2.6431553924560474
+180,1.2399548841366951e-15
+195,2.6431553924560403
+210,5.2410856633260465
+225,7.749339505393066
+240,10.124999999999995
+255,12.327418937426595
+270,14.318912319027586
+285,16.065405140897514
+300,17.537014426634883
+315,18.708560533353555
+330,19.559997982353632
+345,20.076758442819663
+360,20.25
+```
+
+//// END FILE: docs-site/docs/examples/coupler.mdx
+
+//// BEGIN FILE: docs-site/docs/examples/moves.mdx
+# Moves & invariants
+
+Output from `moves_demo.dart`:
+
+```text
+start     : [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26]
+scrambled : [0, 1, 8, 3, 4, 17, 26, 23, 24, 9, 10, 5, 12, 13, 14, 7, 16, 21, 2, 11, 20, 19, 22, 25, 6, 15, 18]
+energy orig=486.0 after=486.0
+restored  : [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26]
+```
+
+//// END FILE: docs-site/docs/examples/moves.mdx
+
+//// BEGIN FILE: docs-site/docs/examples/energy-demo.mdx
+# Energy demo
+
+Output from `energy_demo.dart`:
+
+```text
+0  faces=0  SE9=0.0  SEK=0.0
+a  faces=1  SE9=9.0  SEK=10.125
+f  faces=1  SE9=9.0  SEK=10.125
+g  faces=2  SE9=18.0  SEK=20.25
+r  faces=2  SE9=18.0  SEK=20.25
+s  faces=3  SE9=27.0  SEK=30.375
+z  faces=3  SE9=27.0  SEK=30.375
+a  wordEnergy9=9.0  wordEnergyK=10.125
+gr  wordEnergy9=36.0  wordEnergyK=40.5
+sz  wordEnergy9=54.0  wordEnergyK=60.75
+livnium  wordEnergy9=144.0  wordEnergyK=162.0
+K = 10.125
+perFace: f1=10.125 f2=5.0625 f3=3.375
+```
+
+//// END FILE: docs-site/docs/examples/energy-demo.mdx
+
+//// BEGIN FILE: docs-site/docs/examples/_category_.json
+{ "label": "Examples", "position": 40, "collapsed": false }
+
+//// END FILE: docs-site/docs/examples/_category_.json
+
+//// BEGIN FILE: docs-site/docs/examples/encode.mdx
+
+---
+id: encode
+title: Encode & number formats
+sidebar_label: Encode & number formats
+---
+
+This example shows how the same base-27 **word** can be represented in several formats. Use this as a quick reference when choosing an interchange format for files, logs, or CLIs.
+
+## What each column means
+
+- **csv** – Comma-separated digits (`0..26`). Human-readable, round-trips cleanly.
+- **fixed** – Two decimal digits per symbol (`00..26`). Preserves length and leading `0`s.
+- **big / dec** – Decimal **BigInt** using Livnium’s **sentinel decimal** scheme that preserves leading zeros (safe to parse as a number).
+  Use `encodeDecimal(word)` / `decodeDecimal(payload)`.
+- **raw** – Positional base-27 value as a **BigInt** (compact).
+  Requires **length** to decode unambiguously when leading `0`s are present; use `encodeBigIntRaw(word)` / `decodeBigIntRaw(n, length: ...)`.
+
+---
+
+## Output from `encode_demo.dart`
+
+| word      | csv                  | fixed            | big            | dec            | raw          |
+| --------- | -------------------- | ---------------- | -------------- | -------------- | ------------ |
+| `0`       | `0`                  | `00`             | `1`            | `1`            | `0`          |
+| `a`       | `1`                  | `01`             | `28`           | `28`           | `1`          |
+| `a0`      | `1,0`                | `0100`           | `731`          | `731`          | `27`         |
+| `xyz`     | `24,25,26`           | `242526`         | `491322`       | `491322`       | `18197`      |
+| `000`     | `0,0,0`              | `000000`         | `3`            | `3`            | `0`          |
+| `livnium` | `12,9,22,14,9,21,13` | `12092214092113` | `129334331779` | `129334331779` | `4790160436` |
+| `0az`     | `0,1,26`             | `000126`         | `1434`         | `1434`         | `53`         |
+
+
+> Notes
+>
+> * `raw` is the true base-27 numeric value; it collapses leading `0`s (`'000' → 0`).
+> * `big/dec` retain length information via the sentinel scheme, so `'0'` and `'000'` map to different decimal values.
+> * `fixed` is great for fixed-width displays and lexicographic sorting; every symbol contributes exactly two digits.
+
+---
+
+## Reproduce it (library)
+
+```dart
+import 'package:livnium_core/livnium_core.dart';
+
+void main() {
+  final words = [
+    '0',
+    'a',
+    'a0',
+    'xyz',
+    '000',
+    'livnium',
+    '0az',
+  ];
+
+  print('word  csv  fixed  big  dec  raw');
+  print('---------------------------------------------');
+
+  for (final w in words) {
+    final csv   = encodeCsv(w) ?? 'ERR';
+    final fixed = encodeFixed(w) ?? 'ERR';
+    final dec   = encodeDecimal(w) ?? 'ERR';
+    final raw   = encodeBigIntRaw(w)?.toString() ?? 'ERR';
+    print('$w   $csv   $fixed   $dec   $dec   $raw');
+  }
+}
+```
+
+## Reproduce it (CLI)
+
+```bash
+# One-offs
+livnium encode --codec csv livnium
+livnium encode --codec fixed livnium
+livnium encode --codec decimal livnium
+livnium encode --codec raw livnium
+
+# Round-trip raw (must pass length)
+livnium decode --codec raw 4790160436 --len 7
+```
+
+---
+
+## When to use which
+
+| Need                                                          | Pick      |
+| ------------------------------------------------------------- | --------- |
+| Human-readable, easy to diff                                  | **csv**   |
+| Fixed width; preserve length                                  | **fixed** |
+| Numeric payload that still preserves leading `0`s             | **dec**   |
+| Max compactness as a number (you can carry length separately) | **raw**   |
+
+See also: **[Alphabet API](/api/alphabet)** • **[Arithmetic API](/api/arith27)** • **[CLI](/cli)**
+
+```
+//// END FILE: docs-site/docs/examples/encode.mdx
+
+//// BEGIN FILE: docs-site/docs/examples/hierarchy-corebit.mdx
+# Hierarchy & CoreBit
+
+`hierarchy_demo.dart`:
+
+```text
+Root slot "s": majority(child)="0", after="0"
+```
+
+`core_bit_demo.dart`:
+
+```text
+Initial center: 0
+Biased center: g
+```
+
+//// END FILE: docs-site/docs/examples/hierarchy-corebit.mdx
+
+//// BEGIN FILE: docs-site/docs/concepts/energy-model.mdx
+# Energy model
+
+Exposure drives energy. The equilibrium constant derives from the lattice:
+
+```dart
+const double equilibriumConstant = 27 / 8 + 27 / 12 + 27 / 6; // 10.125
+
+double perFaceUnitEnergy(int faces) {
+  if (faces <= 0 || faces > 3) {
+    throw ArgumentError('faces must be 1..3');
+  }
+  return equilibriumConstant / faces;
+}
+```
+
+//// END FILE: docs-site/docs/concepts/energy-model.mdx
+
+//// BEGIN FILE: docs-site/docs/concepts/projections.mdx
+# Projections
+
+Helpers group lattice points along axes or by radius:
+
+```dart
+Map<(int, int), List<Vec3>> dropAxis(String axis) { /* ... */ }
+
+Map<int, List<Vec3>> radialBins() { /* ... */ }
+```
+
+//// END FILE: docs-site/docs/concepts/projections.mdx
+
+//// BEGIN FILE: docs-site/docs/concepts/_category_.json
+{ "label": "Concepts", "position": 20, "collapsed": false }
+
+//// END FILE: docs-site/docs/concepts/_category_.json
+
+//// BEGIN FILE: docs-site/docs/concepts/alphabet.mdx
+# Alphabet (base-27)
+
+Livnium uses a custom base‑27 alphabet mapping glyphs to digits.
+
+```dart
+const int kRadix = 27; // 0..26
+```
+
+//// END FILE: docs-site/docs/concepts/alphabet.mdx
+
+//// BEGIN FILE: docs-site/docs/concepts/grid-and-metrics.mdx
+# Grid & distances
+
+The lattice uses coordinates in {-1,0,1}^3:
+
+```dart
+Iterable<Vec3> cube3Coords() sync* {
+  for (var x = -1; x <= 1; x++) {
+    for (var y = -1; y <= 1; y++) {
+      for (var z = -1; z <= 1; z++) {
+        yield Vec3(x, y, z);
+      }
+    }
+  }
+}
+```
+
+Manhattan distance helper:
+
+```dart
+int l1(Vec3 v) => v.x.abs() + v.y.abs() + v.z.abs();
+```
+
+//// END FILE: docs-site/docs/concepts/grid-and-metrics.mdx
+
+//// BEGIN FILE: docs-site/docs/api/grid.mdx
+---
+id: grid
+title: Grid API
+sidebar_label: Grid API
+sidebar_position: 5
+---
+
+3×3×3 lattice helpers and distance metrics.
+
+## Quick reference
+
+```dart
+Iterable<Vec3> cube3Coords(); // yields all 27 positions with x,y,z ∈ {-1,0,1}
+
+bool isCore(Vec3 v);    // (0,0,0)
+bool isCenter(Vec3 v);  // exposure 1 (face centers)
+bool isEdge(Vec3 v);    // exposure 2
+bool isCorner(Vec3 v);  // exposure 3
+
+int    facesForVec3(Vec3 v); // 0..3 exposure for v
+int    l1(Vec3 v);           // |x| + |y| + |z|
+int    linf(Vec3 v);         // max(|x|, |y|, |z|)
+double l2(Vec3 v);           // sqrt(x^2 + y^2 + z^2)
+```
+
+### Coordinate system
+- Domain: `x,y,z ∈ {-1, 0, 1}`
+- Core: `(0,0,0)`
+- Exposure classes by non‑zero axes count:
+  - 0 → **core** (1 point)
+  - 1 → **center** (6 points)
+  - 2 → **edge** (12 points)
+  - 3 → **corner** (8 points)
+
+Total = `1 + 6 + 12 + 8 = 27`.
+
+### Distances
+- `l1(v)`: Manhattan shells `{0,1,2,3}` partition the lattice
+  - counts: `L1=0 → 1`, `1 → 6`, `2 → 12`, `3 → 8`
+- `linf(v)`: Chebyshev radius in `{0,1}` for core/face/edge/corner layers
+- `l2(v)`: Euclidean length (useful for visualization/weighting)
+
+
+## Examples
+
+```dart
+final all = cube3Coords().toList();  // length == 27
+
+final v = Vec3(1, 0, -1);
+isCore(v);      // false
+isCenter(v);    // false
+isEdge(v);      // true  (two non-zero axes)
+isCorner(v);    // false
+facesForVec3(v);// 2
+
+l1(v);          // 2
+linf(v);        // 1
+l2(v);          // 1.4142135623730951
+```
+
+## Notes
+- Exposure is purely geometric (independent of symbol mapping).
+- Use `facesForVec3(v)` to bridge geometry → energy or coupling models.
+- Functions are `O(1)`; `cube3Coords()` is deterministic and ordered by a fixed scan.
+
+## See also
+- **[Concepts: Grid & distances](/concepts/grid-and-metrics)** — background and counts.
+- **[Energy API](/api/energy)** — exposure → energy.
+- **[Coupler API](/api/coupler)** — uses `L1` and `faces`.
+//// END FILE: docs-site/docs/api/grid.mdx
+
+//// BEGIN FILE: docs-site/docs/api/energy.mdx
+---
+id: energy
+title: Energy API
+sidebar_label: Energy API
+sidebar_position: 4
+---
+
+
+Energy functions over the 3×3×3 lattice, using two scales:
+
+- **SE9**: per-face unit = 9 → center=9, edge=18, corner=27, core=0.
+- **K-units**: per-face unit = K, where `K = equilibriumConstant = 10.125` → center=1K, edge=2K, corner=3K, core=0.
+
+Default glyph→exposure mapping (conventional):
+- `'0'` → **core** (0 faces)
+- `'a'..'f'` → **center** (1 face)
+- `'g'..'r'` → **edge** (2 faces)
+- `'s'..'z'` → **corner** (3 faces)
+
+> Use the CLI `livnium mapping` to inspect or regenerate mappings.
+
+## Quick reference
+
+```dart
+enum SymbolClass { core, center, edge, corner }
+
+int    facesForGlyph(String ch);    // 0,1,2,3 based on the conventional mapping
+double symbolEnergy9(String s);     // expects a single-glyph string, SE9 scale
+double wordEnergy9(String word);    // sum of glyph energies (SE9)
+double symbolEnergyK(String s);     // expects a single-glyph string, K scale
+double wordEnergyK(String word);    // sum of glyph energies (K)
+const  double equilibriumConstant = 27 / 8 + 27 / 12 + 27 / 6; // 10.125
+double perFaceUnitEnergy(int faces); // per-face unit for a class (SE9=9 per face; K uses equilibriumConstant)
+```
+
+## Constants and scales
+
+```
+equilibriumConstant = 27/8 + 27/12 + 27/6 = 10.125
+SE9 per-face unit   = 9
+K per-face unit     = equilibriumConstant
+```
+
+Class energies per glyph:
+- **core (0 faces)**: 0
+- **center (1 face)**: 9 (SE9) or 1 × K
+- **edge (2 faces)**: 18 (SE9) or 2 × K
+- **corner (3 faces)**: 27 (SE9) or 3 × K
+
+## Functions
+
+### `facesForGlyph(String ch) → int`
+Returns 0, 1, 2, or 3 for core/center/edge/corner under the conventional mapping.
+
+### `symbolEnergy9(String s) → double` and `symbolEnergyK(String s) → double`
+Energy of a **single** glyph `s` in SE9 or K units. If `s.length != 1` or glyph invalid, behavior depends on implementation (typically throws or returns 0). Prefer passing one-character strings.
+
+### `wordEnergy9(String word) → double` and `wordEnergyK(String word) → double`
+Sum of per-glyph energies of `word` in the requested scale. Invalid glyphs cause the function to return `null` or throw, depending on your implementation version.
+
+### `perFaceUnitEnergy(int faces) → double`
+Returns the energy-per-face for a given exposure class. In SE9 this is 9 for faces in {1,2,3}, and 0 for 0. For K-units, multiply `faces` by `equilibriumConstant` yourself.
+
+## Examples
+
+```dart
+facesForGlyph('0');  // 0  (core)
+facesForGlyph('b');  // 1  (center)
+facesForGlyph('n');  // 2  (edge)
+facesForGlyph('y');  // 3  (corner)
+
+symbolEnergy9('b');  // 9
+symbolEnergyK('b');  // 10.125
+
+wordEnergy9('bny');  // 9 + 18 + 27 = 54
+wordEnergyK('bny');  // 1K + 2K + 3K = 6 * 10.125 = 60.75
+```
+
+## Notes
+- The **core** class is represented by glyph `'0'` in the conventional mapping; it contributes zero energy.
+- If you switch to a different mapping strategy (e.g., a harmonic mapping), ensure `facesForGlyph` and the energy functions are updated accordingly.
+- Energies scale linearly with word length and are independent of glyph order.
+
+## See also
+- **[Concepts: Energy Model](/concepts/energy-model)** — background and rationale for SE9 and K.
+- **[Coupler](/api/coupler)** — uses `equilibriumConstant` in its coupling formula.
+- **[CLI](/cli)** — `livnium energy <word> [--k]`.
+
+//// END FILE: docs-site/docs/api/energy.mdx
+
+//// BEGIN FILE: docs-site/docs/api/coupler.mdx
+---
+id: coupler
+title: Coupler API
+sidebar_label: Coupler API
+sidebar_position: 3
+---
+
+Coupling model and helpers for ranking lattice positions by influence.
+
+## Quick reference
+
+```dart
+class CouplerParams {
+  final double tau0;   // amplitude (gain)
+  final double alpha;  // path-loss exponent
+  const CouplerParams({this.tau0 = 1.0, this.alpha = 1.0});
+}
+
+double couplingAt(Vec3 v, CouplerParams p);
+List<({Vec3 pos, double C, int L, int faces})> rankTopCouplers(CouplerParams p, int topN);
+
+double complexSumMagnitude(List<double> values);
+```
+
+## Model
+
+```
+C(v) = tau0 × (10.125 / faces(v)) × 1 / (L1(v))^alpha
+```
+
+- `faces(v)`: exposure count in the 3×3×3 lattice (core excluded)
+  - center (on a face): 1
+  - edge: 2
+  - corner: 3
+- `L1(v)`: Manhattan distance from the core `(0,0,0)` (≥ 1 for non-core points)
+- `tau0`, `alpha`: tunable parameters
+
+> 10.125 is the equilibrium constant used across the energy model, chosen so that center/edge/corner classes have clean ratios in K-units.
+
+## Functions
+
+### `couplingAt(Vec3 v, CouplerParams p) → double`
+Returns the coupling magnitude at a lattice coordinate `v` using the model above.
+
+### `rankTopCouplers(CouplerParams p, int topN) → List<Record>`
+Returns the strongest `topN` non-core positions.
+
+Each record contains:
+- `pos: Vec3` — coordinate `(x,y,z)` in `{ -1,0,1 }`
+- `C: double` — coupling magnitude
+- `L: int` — `L1(pos)`
+- `faces: int` — exposure count (1,2,3)
+
+### `complexSumMagnitude(List<double> values) → double`
+Interprets `values` as **interleaved complex pairs** `[re0, im0, re1, im1, …]`,
+sums them component-wise, and returns the magnitude of the resulting phasor:
+
+```
+|Σ_k (re_k + i·im_k)| = sqrt( (Σ re_k)^2 + (Σ im_k)^2 )
+```
+
+Input must have even length; pairs are processed in order.
+
+## Examples
+
+```dart
+final p = CouplerParams(tau0: 1.0, alpha: 1.5);
+
+final c = couplingAt(Vec3(1, 0, 0), p);  // face center
+// -> positive double
+
+final top = rankTopCouplers(p, 5);
+// top.forEach((t) => print('pos=${t.pos} L=${t.L} faces=${t.faces} C=${t.C}'));
+
+final mag = complexSumMagnitude([1.0, 0.0, 0.0, 1.0]); // (1+0i) + (0+1i)
+// mag == sqrt( (1+0)^2 + (0+1)^2 ) = sqrt(2)
+```
+
+## Notes
+- Core `(0,0,0)` is excluded by design (undefined exposure).
+- If you need stable ordering when magnitudes tie, sort by `(L asc, faces desc, pos.lex)` after ranking.
+- Typical ranges:
+  - `tau0 > 0`
+  - `alpha ≥ 0` (0 → no distance penalty; 2 → inverse-square-like)
+
+## See also
+- **[Energy Model](/concepts/energy-model)** — SE9 vs K and the 10.125 constant.
+- **[Grid](/api/grid)** — exposure/`faces(v)` and `L1(v)` definitions.
+- **[CLI](/cli)** — `livnium couplers --n 5 --alpha 1.5`.
+
+//// END FILE: docs-site/docs/api/coupler.mdx
+
+//// BEGIN FILE: docs-site/docs/api/arith27.mdx
+---
+id: arith27
+title: Arithmetic API
+sidebar_label: Arithmetic API
+sidebar_position: 2
+---
+
+Canonical positional arithmetic over the Livnium alphabet (`0,a..z` → digits `0..26`).
+
+**Value definition (positional)**
+
+For a word `s = g₀ g₁ … gₙ₋₁` with digits `dᵢ = symbolToValue(gᵢ)`:
+
+```
+val(s) = Σ i=0..n-1  d_i × 27^(n-1-i)
+```
+
+:::tip
+Decimal numerals like "123" are **not** valid words (there is no glyph '1'). Use `fromDecimal`/`toDecimal` to convert.
+:::
+
+## Quick reference
+
+```dart
+bool   _valid(String s);          // internal: same semantics as isValidWord(s)
+BigInt? toDecimal(String s);      // word → BigInt (positional base-27), or null
+String? fromDecimal(BigInt n);    // BigInt → canonical word (no leading junk), or null if n<0
+String? add27(String a, String b);// canonical addition with carries, or null on invalid input
+```
+
+### Guarantees
+- `_valid(s)` returns true iff every glyph is in the alphabet '0' and 'a'..'z'.
+- `toDecimal` treats the leftmost glyph as **most significant**.
+- `fromDecimal(0)` returns "0"; for `n>0` it returns the shortest canonical word (no unnecessary leading '0').
+- `add27` is equivalent to `fromDecimal(toDecimal(a) + toDecimal(b))` with input validation.
+
+## Examples
+
+### Convert word ↔ decimal
+```dart
+toDecimal('a');     // 1
+toDecimal('z');     // 26
+toDecimal('a0');    // 27            (1·27 + 0)
+toDecimal('ba');    // 55            (2·27 + 1)
+
+fromDecimal(BigInt.zero);        // "0"
+fromDecimal(BigInt.from(27));    // "a0"
+fromDecimal(BigInt.from(28));    // "aa"
+```
+
+### Addition
+```dart
+add27('a', 'z');      // "a0"     (1 + 26 = 27)
+add27('z', 'z');      // "ay"     (26 + 26 = 52 → 1·27 + 25)
+add27('a0', 'a');     // "aa"     (27 + 1 = 28)
+add27('0', '0');      // "0"
+// Invalid inputs return null:
+add27('A', 'a');      // null (uppercase unsupported)
+add27('a1', 'a');     // null ('1' is not a glyph)
+```
+
+## Edge cases
+- Negative inputs to `fromDecimal` return `null`.
+- Leading '0' glyphs in a valid word are **preserved** when going word → word via arithmetic only if they are significant in the result; e.g. `add27('0a', '0')` may or may not keep the leading '0' — use padding at the application layer if fixed width is required.
+- All operations run in O(n) in the length of the input strings; big‑int math depends on operand size.
+
+## See also
+- **[Alphabet](/api/alphabet)** — glyph↔digit mapping used here.
+- **[Codecs](/api/codec)** — fixed/CSV/decimal/raw encodings.
+- **[CLI](/cli)** — `livnium add`, `livnium encode/ decode` commands.
+
+//// END FILE: docs-site/docs/api/arith27.mdx
+
+//// BEGIN FILE: docs-site/docs/api/_category_.json
+{
+  "label": "API Reference",
+  "position": 30,
+  "collapsed": false,
+  "link": { "type": "generated-index", "slug": "/api", "title": "API Reference" }
+}
+
+//// END FILE: docs-site/docs/api/_category_.json
+
+//// BEGIN FILE: docs-site/docs/api/tree-corebit.mdx
+---
+id: tree-corebit
+title: Tree & CoreBit API
+sidebar_label: Tree & CoreBit API
+sidebar_position: 9
+---
+
+Hierarchical 27‑ary micro‑cube tree for composing larger structures and a small "CoreBit" unit for local relaxation.
+
+## Quick reference
+
+```dart
+class CubePath {
+  CubePath.parse(String dotted); // e.g., "s.y.a" → [19,25,1]
+  CubePath child(int d);         // append digit (0..26)
+  @override String toString();   // back to dotted glyphs
+}
+
+class MicroCube {
+  final List<int> symbols;                // length 27, digits 0..26
+  final Map<int, MicroCube> children;     // optional children by slot 0..26
+  MicroCube({this.energyBudget = 10.125});
+  MicroCube ensureChild(int pos);         // create/access child at pos
+}
+
+class LivniumTree {
+  final MicroCube root;
+  LivniumTree();                          // root micro‑cube
+}
+
+class CoreBit {
+  void configureCenter(int digit, double beta); // bias center toward digit
+  void relax({int maxIters = 10});              // local relaxation
+  String get centerSymbolString;                // glyph at center after relax
+}
+```
+
+## Concepts
+
+- **CubePath** — base‑27 address from the root using glyphs `0,a..z`, dot‑separated.
+- **MicroCube** — a 3×3×3 lattice node with 27 slots. Each slot can hold a digit `0..26` and optionally a **child** `MicroCube` to form a tree (fan‑out 27).
+- **LivniumTree** — convenience wrapper with a `root` micro‑cube plus helpers (e.g., set/get symbol and hierarchical evolution in your implementation).
+- **CoreBit** — a minimal local unit you can bias (e.g., toward a center glyph) and relax iteratively.
+
+> The default `energyBudget = 10.125` mirrors the K‑unit equilibrium constant to keep scales consistent with the **Energy** and **Coupler** models.
+
+## Addressing with `CubePath`
+
+```dart
+final p = CubePath.parse('s.y.a'); // digits [19,25,1]
+final q = p.child(0);              // append digit 0 → [19,25,1,0]
+q.toString();                      // 's.y.a.0'
+```
+
+- Parsing rules: each segment must be a **single glyph** in the alphabet; empty segments or invalid glyphs raise a `FormatException`.
+
+## Building the hierarchy
+
+```dart
+final tree = LivniumTree();
+
+// Ensure a nested node exists under path 'a.b.c'
+final path = CubePath.parse('a.b.c');
+final node = tree.root.ensureChild(1)      // 'a' → 1
+                   .ensureChild(2)         // 'b' → 2
+                   .ensureChild(3);        // 'c' → 3
+
+// Set a symbol at slot 0 (conventionally the core/center index is 13; your API may differ)
+node.symbols[0] = 5; // glyph 'e'
+```
+
+**Rules**
+- Valid child indices are **0..26**. Out‑of‑range throws `RangeError`.
+- A `MicroCube` can host at most 27 distinct children — one per slot.
+
+## CoreBit usage
+
+```dart
+final core = CoreBit();
+core.configureCenter(1 /* 'a' */, 0.25); // bias strength beta = 0.25
+core.relax(maxIters: 12);
+final glyph = core.centerSymbolString;    // e.g., 'a'
+```
+
+- `configureCenter(digit, beta)` biases the center toward a target digit with weight `beta`.
+- `relax(maxIters)` runs the local update loop; read back the resulting glyph from `centerSymbolString`.
+
+## Patterns that work well
+
+- **Majority from children → parent**: aggregate child symbols (e.g., by majority) into the parent slot, then run a **local relax** on the parent. Push a **bias** back down to align children. Repeat (post‑order) up to a depth limit.
+- **Indexing**: keep the 27‑slot order consistent with your `cube3Coords()` enumeration so geometry‑dependent modules (Energy/Coupler) line up.
+
+## Errors & edge cases
+
+- `CubePath.parse('')` returns the **root** path.
+- Creating a child at an existing slot returns the existing node; it does not allocate more than one child per slot.
+- Ensure all digits are in `0..26` — convert from glyphs with **Alphabet API** helpers if needed.
+
+## See also
+- **[Alphabet API](/api/alphabet)** — glyph↔digit mapping used by `CubePath`.
+- **[Grid API](/api/grid)** — position indexing for the 27 slots.
+- **[Energy API](/api/energy)** — K‑unit constant used as the default `energyBudget`.
+- **[Potts API](/api/potts)** — local relaxation engine used inside micro‑cubes.
+//// END FILE: docs-site/docs/api/tree-corebit.mdx
+
+//// BEGIN FILE: docs-site/docs/api/potts.mdx
+---
+id: potts
+title: Potts API
+sidebar_label: Potts API
+sidebar_position: 8
+---
+
+27-state Potts network on the 3×3×3 lattice. Useful as an associative memory over base‑27 symbols.
+
+## Quick reference
+
+```dart
+double cosKernel(int k, int l) {
+  const twoPiOver27 = 2 * math.pi / 27.0;
+  return math.cos(twoPiOver27 * (k - l));
+}
+
+typedef SimilarityKernel = double Function(int k, int l);
+
+class Potts27 {
+  Potts27.cube();
+  void buildFromCouplers({
+    required CouplerParams params,
+    required SimilarityKernel kernel,
+    required double targetNorm,
+  });
+  void store(List<int> pattern); // pattern length 27, each digit 0..26
+  void relax(int iterations);    // run iterative relaxation
+}
+```
+
+## Concepts
+
+- **States**: integers `0..26` (map glyphs via `stringToDigits()`).
+- **Kernel**: similarity between two states. `cosKernel(k,l)` is periodic with period 27:
+  ```
+  cosKernel(k,l) = cos( (2π/27) × (k - l) )
+  ```
+- **Couplers → weights**: `buildFromCouplers` derives a lattice coupling matrix from `CouplerParams` (exposure + distance) and scales it so the induced operator has approximately `targetNorm` (implementation-dependent normalization).
+- **Store/relax**: `store` imprints a 27-length pattern (one state per lattice position). `relax(n)` iterates the network update rule `n` times to settle toward an attractor.
+
+## Typical workflow
+
+```dart
+import 'dart:math' as math;
+
+// 1) Choose coupler parameters and kernel
+final p = CouplerParams(tau0: 1.0, alpha: 1.0);
+final kernel = cosKernel;
+
+// 2) Create a Potts model on the 3×3×3 cube
+final potts = Potts27.cube();
+
+// 3) Build weights from the geometric couplers, normalized
+potts.buildFromCouplers(params: p, kernel: kernel, targetNorm: 1.0);
+
+// 4) Encode a word to digits and store it (expects length 27 if you use full-lattice patterns)
+final digits = stringToDigits('a0bcdefghijklmnopqrstuvwxyz'); // example only
+if (digits != null && digits.length == 27) {
+  potts.store(digits);
+}
+
+// 5) Relax toward an attractor
+potts.relax(10);
+```
+
+## Notes
+- `pattern` must use digits `0..26`. If you work with glyphs, convert with **Alphabet API** helpers.
+- Lattice order for the 27 positions should match `cube3Coords()` enumeration used internally (check your implementation to ensure consistent indexing).
+- `targetNorm` controls overall strength; larger values produce stronger attraction but may reduce basin diversity.
+- `relax` update rule (synchronous vs asynchronous) is implementation-defined; use higher iteration counts for convergence tests.
+
+## See also
+- **[Coupler API](/api/coupler)** — geometric coupling and parameters.
+- **[Grid API](/api/grid)** — coordinate enumeration & distances.
+- **[Alphabet API](/api/alphabet)** — glyph↔digit mapping.
+- **[Arithmetic API](/api/arith27)** — base‑27 conversions.
+//// END FILE: docs-site/docs/api/potts.mdx
+
+//// BEGIN FILE: docs-site/docs/api/rotation-moves.mdx
+---
+id: rotation-moves
+title: Rotation & Moves API
+sidebar_label: Rotation & Moves API
+sidebar_position: 7
+---
+
+Rubik’s-style face moves for the 3×3×3 lattice and utilities to build/apply the resulting permutations over 27 indices.
+
+## Quick reference
+
+```dart
+// Faces in standard cube notation
+enum Face { U, D, L, R, F, B }
+
+// One move = a face and number of quarter turns
+class FaceMove {
+  final Face face;
+  final int quarterTurns; // -1 (counter‑clockwise), 1 (clockwise), 2 (half‑turn)
+  const FaceMove(this.face, this.quarterTurns);
+}
+
+// Permutation for a single move: index -> newIndex (length 27)
+List<int> permutationFor(FaceMove m);
+
+// Apply a permutation to a data array (in‑place)
+void applyPerm<T>(List<T> data, List<int> perm);
+```
+
+> Indexing convention: the 27 slots are ordered by your project’s fixed scan (typically `cube3Coords()` order). Ensure consistent use across Grid/Energy/Coupler/Examples.
+
+## Notation
+
+- Faces: `U, D, L, R, F, B`
+- Suffixes in strings (CLI/UX layer): no suffix = clockwise `1`, `'` = counter‑clockwise `-1`, `2` = half‑turn `2`.
+- Example sequence: `U R F' D2`
+
+## Examples
+
+```dart
+// Build a sequence manually
+final seq = <FaceMove>[
+  FaceMove(Face.U, 1),
+  FaceMove(Face.R, 1),
+  FaceMove(Face.F, -1),
+  FaceMove(Face.D, 2),
+];
+
+// Compose permutations left‑to‑right
+var perm = List<int>.generate(27, (i) => i);
+for (final m in seq) {
+  final p = permutationFor(m);
+  final tmp = List<int>.from(perm);
+  for (var i = 0; i < perm.length; i++) {
+    perm[i] = p[tmp[i]]; // compose
+  }
+}
+
+// Apply to data
+final data = List<int>.generate(27, (i) => i);
+applyPerm<int>(data, perm);
+// data now contains the permuted 0..26
+```
+
+### Parsing convenience (optional layer)
+
+If you implement a string parser (as used by the CLI) the rules are:
+
+- Tokenize by whitespace
+- First char is the face; remaining substring is the suffix (`''` | `'` | `'2'`)
+- Map to `FaceMove(face, q)` where `q ∈ {-1,1,2}`
+
+```dart
+// Example signature (your project may keep this private to the CLI)
+// List<FaceMove> parseMoves(String s);
+```
+
+## Edge cases
+
+- A `quarterTurns` value of `0` is effectively a no‑op; typically not emitted by parsers.
+- Applying a permutation with a mismatched length throws; always use length 27 with this model.
+- Composition order matters; the example composes left‑to‑right to match the natural reading of sequences.
+
+## See also
+
+- **[Grid API](/api/grid)** — consistent coordinate/indexing.
+- **[Examples: Moves](/examples/moves)** — end‑to‑end permutations.
+- **[CLI](/cli)** — `livnium moves --seq "U R F' D2"`.
+//// END FILE: docs-site/docs/api/rotation-moves.mdx
+
+//// BEGIN FILE: docs-site/docs/api/alphabet.mdx
+---
+id: alphabet
+title: Alphabet API
+sidebar_label: Alphabet API
+sidebar_position: 1
+---
+
+Base-27 glyph set used across Livnium Core.
+
+- **Digits (0–26):** `0, a, b, …, z`
+- **Radix:** `kRadix = 27`
+- **Glyph→digit**: `'0'→0`, `'a'→1`, …, `'z'→26`
+- **Digit→glyph**: `0→'0'`, `1→'a'`, …, `26→'z'`
+
+:::note Terminology
+A **glyph** is a character (`'0'..'z'`). A **digit** is its numeric value (`0..26`).
+:::
+
+## Quick reference
+
+```dart
+const int kRadix = 27;
+
+int?    symbolToValue(String ch);   // one glyph → digit (0..26) or null
+String? valueToSymbol(int v);       // digit (0..26) → glyph or null
+List<int>? stringToDigits(String s);// word → digits[] or null if any glyph invalid
+String  digitsToString(List<int> d);// digits[] → word; expects each in 0..26
+bool    isValidWord(String s);      // true iff every glyph is in the alphabet
+```
+
+## Mapping
+
+| Glyph | Digit | Glyph | Digit | Glyph | Digit |
+|------:|------:|------:|------:|------:|------:|
+| `0`   | 0     | `j`   | 10    | `s`   | 19    |
+| `a`   | 1     | `k`   | 11    | `t`   | 20    |
+| `b`   | 2     | `l`   | 12    | `u`   | 21    |
+| `c`   | 3     | `m`   | 13    | `v`   | 22    |
+| `d`   | 4     | `n`   | 14    | `w`   | 23    |
+| `e`   | 5     | `o`   | 15    | `x`   | 24    |
+| `f`   | 6     | `p`   | 16    | `y`   | 25    |
+| `g`   | 7     | `q`   | 17    | `z`   | 26    |
+| `h`   | 8     | `r`   | 18    |       |       |
+| `i`   | 9     |       |       |       |       |
+
+## Usage
+
+### Validate
+
+```dart
+isValidWord('a0z');   // true
+isValidWord('A0z');   // false (uppercase not allowed)
+isValidWord('a-');    // false
+```
+
+### Convert glyphs ↔ digits
+
+```dart
+symbolToValue('a');   // 1
+symbolToValue('0');   // 0
+symbolToValue('@');   // null
+
+valueToSymbol(26);    // 'z'
+valueToSymbol(27);    // null
+```
+
+### Whole-word transforms
+
+```dart
+stringToDigits('a0z');      // [1, 0, 26]
+stringToDigits('bad!');     // null
+
+digitsToString([1,0,26]);   // 'a0z'
+// Expects each digit in 0..26; validate beforehand if unsure.
+```
+
+## Edge cases & guarantees
+
+- All APIs are **case-sensitive** (`'A'` is invalid).
+- `stringToDigits` returns `null` if **any** character is outside the alphabet.
+- `digitsToString` **assumes** each element is in `0..26`. Validate your list or sanitize first.
+- Leading `'0'` glyphs are preserved: `stringToDigits('0ab') → [0,1,2]` and back.
+- Time complexity: all ops are **O(n)** over string/array length; the tables are constant-size.
+
+:::tip Patterns
+Use `isValidWord(s)` → `stringToDigits(s)` → arithmetic/encoding → `digitsToString(d)` for round-trips.
+:::
+
+## See also
+- **[Arithmetic (base-27)](/api/arith27)** — add/balanced/cyclic and carry-save.
+- **[Codecs](/api/codec)** — CSV, fixed, decimal, raw encodings built on this alphabet.
+- **[Energy Model](/concepts/energy-model)** — how glyph classes map to exposure/energy.
+
+//// END FILE: docs-site/docs/api/alphabet.mdx
+
+//// BEGIN FILE: docs-site/docs/api/projection.mdx
+---
+id: projection
+title: Projection API
+sidebar_label: Projection API
+sidebar_position: 6
+---
+
+Helpers that bucket the 3×3×3 lattice into useful projections/slices.
+
+## Quick reference
+
+```dart
+// Drop one axis and bucket points by the remaining two.
+// axis: 'x' | 'y' | 'z'
+Map<(int, int), List<Vec3>> dropAxis(String axis);
+
+// Group by L1 (Manhattan) radius: shells 0..3.
+Map<int, List<Vec3>> radialBins();
+
+// Generic coarse graining by an arbitrary key function.
+Map<K, List<Vec3>> coarseGrain<K>(K Function(Vec3) keyFn);
+```
+
+## `dropAxis(axis)`
+
+Drop one axis and group by the remaining two coordinates.
+
+- `axis = 'x'`: keys are `(y,z)` pairs
+- `axis = 'y'`: keys are `(x,z)` pairs
+- `axis = 'z'`: keys are `(x,y)` pairs
+
+Each key is a tuple of integers in `{-1,0,1}`. The value is the list of 3D points that map to that 2D bin.
+
+**Example**
+
+```dart
+final yz = dropAxis('x');             // Map<(int,int), List<Vec3>>
+final bucket = yz[(0, 1)] ?? const []; // all points with y=0, z=1 (any x)
+```
+
+Common uses:
+- 2D slices for visualization
+- Heatmaps per face
+- Aggregations by “row/col” after collapsing one axis
+
+## `radialBins()`
+
+Groups by L1 distance from the core. Keys are integers `{0,1,2,3}`; values are the points in each shell.
+
+```
+bins[0] → [(0,0,0)]              // 1 point
+bins[1] → 6 points               // face centers
+bins[2] → 12 points              // edges
+bins[3] → 8 points               // corners
+```
+
+**Example**
+
+```dart
+final r = radialBins();
+print(r[1]!.length); // 6
+```
+
+Use cases:
+- Complexity-aware sampling (core vs shell)
+- Radial summaries (e.g., average energy per shell)
+- Shell-wise coupling/weight tuning
+
+## `coarseGrain(keyFn)`
+
+Generic bucketing by any key you define.
+
+```dart
+// Group by exposure (faces) count: 0..3
+final byFaces = coarseGrain<int>((v) =>
+  ((v.x != 0) ? 1 : 0) + ((v.y != 0) ? 1 : 0) + ((v.z != 0) ? 1 : 0));
+
+// Group by Chebyshev radius (∞-norm)
+final byLinf = coarseGrain<int>((v) =>
+  [v.x.abs(), v.y.abs(), v.z.abs()].reduce((a,b) => a > b ? a : b));
+```
+
+This is the most flexible way to build your own projections/partitions over the cube.
+
+## Examples
+
+```dart
+// Count how many points land in each (x,y) cell when dropping z
+final xy = dropAxis('z');
+for (final entry in xy.entries) {
+  final (x, y) = entry.key;
+  final count = entry.value.length;
+  print('cell=($x,$y) count=$count'); // each is 3 along the dropped axis
+}
+
+// Radial shell counts
+final shells = radialBins();
+for (final k in [0,1,2,3]) {
+  print('L1=$k -> ${shells[k]?.length ?? 0} points');
+}
+```
+
+## Notes
+- All keys and coordinates are integers in `{-1,0,1}`.
+- Buckets are deterministic — iteration order of the map keys depends on the runtime’s map semantics; sort keys if you need stable output.
+- `coarseGrain` lets you mirror the grouping used by **Energy** or **Coupler** by making `keyFn` compute exposure, `L1`, or any derived label.
+
+## See also
+- **[Grid API](/api/grid)** — positions, distances, exposure.
+- **[Examples: Projections](/examples/projections)** — end-to-end usage.
+- **[CLI](/cli)** — `livnium project --radial | --coarse-faces | --drop <x|y|z>`.
+//// END FILE: docs-site/docs/api/projection.mdx
+
