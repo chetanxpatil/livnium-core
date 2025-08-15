@@ -1,0 +1,18 @@
+---
+id: decode
+title: decode
+sidebar_label: decode
+---
+
+```bash
+livnium decode --codec <csv|fixed|decimal|raw> <payload> [--len N]
+```
+
+Examples:
+
+```bash
+livnium decode --codec csv "1,0,26"      # a0z
+livnium decode --codec fixed 010026      # a0z
+livnium decode --codec decimal 731       # a0
+livnium decode --codec raw 53 --len 3    # 0az
+```
