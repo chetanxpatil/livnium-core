@@ -8,8 +8,9 @@ import { Cubelet } from './Cubelet.jsx';
 import { useStore } from '../app/store.jsx';
 import { stepPotts27 } from '../lib/potts27.js';
 
-export function Scene({ cubes }) {
+export function Scene() {
   const {
+    cubes,
     drop,
     slice,
     showLabels,
