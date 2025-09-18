@@ -1,8 +1,10 @@
 import React from 'react';
 import { useStore } from '../app/store.jsx';
+import { Face } from '../lib/moves.js';
 
 export function TopBar() {
   const {
+    applyMove,
     mode,
     setMode,
     alpha,
@@ -129,6 +131,7 @@ export function TopBar() {
       <button className={`${btn} ml-2`} onClick={reset}>
         Reset
       </button>
+
       <div className="flex items-center gap-2 ml-4">
         <span className={label}>Temp</span>
         <input
@@ -150,6 +153,26 @@ export function TopBar() {
       <button className={`${btn} ml-2`} onClick={resetPotts}>
         Reset Potts
       </button>
+      <div className="ml-auto flex items-center gap-2">
+        <span className={label}>Moves</span>
+        {[
+          [Face.U, 'U', 1], [Face.U, "U'", -1], [Face.U, 'U2', 2],
+          [Face.R, 'R', 1], [Face.R, "R'", -1], [Face.R, 'R2', 2],
+          [Face.F, 'F', 1], [Face.F, "F'", -1], [Face.F, 'F2', 2],
+          [Face.D, 'D', 1], [Face.D, "D'", -1], [Face.D, 'D2', 2],
+          [Face.L, 'L', 1], [Face.L, "L'", -1], [Face.L, 'L2', 2],
+          [Face.B, 'B', 1], [Face.B, "B'", -1], [Face.B, 'B2', 2],
+        ].map(([face, labelText, q]) => (
+          <button
+            key={labelText + face}
+            className={btn}
+            onClick={() => applyMove({ face, quarterTurns: q })}
+            title={`${face} ${q === 2 ? '2' : q === -1 ? 'prime' : ''}`}
+          >
+            {labelText}
+          </button>
+        ))}
+      </div>
     </div>
   );
 }
