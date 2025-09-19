@@ -1,6 +1,5 @@
 import React, { createContext, useContext, useState } from 'react';
 import { createPotts27 } from '../lib/potts27.js';
-import { applyFaceMove, applyMoves as applyMovesLib } from '../lib/moves.js';
 
 const StoreContext = createContext();
 
@@ -45,11 +44,6 @@ export function StoreProvider({ children }) {
     setPottsModel(createPotts27(3));
   };
 
-  const applyMove = (move) => setCubes(prev => applyFaceMove(prev, move));
-  const applyMoves = (seq) => setCubes(prev => applyMovesLib(prev, seq));
-  const invertMoves = (seq) =>
-    seq.slice().reverse().map(m => ({ face: m.face, quarterTurns: -m.quarterTurns }));
-
   const value = {
     cubes,
     setCubes,
@@ -79,9 +73,6 @@ export function StoreProvider({ children }) {
     setIsPottsRunning,
     resetPotts,
     reset,
-    applyMove,
-    applyMoves,
-    invertMoves,
   };
 
   return <StoreContext.Provider value={value}>{children}</StoreContext.Provider>;
