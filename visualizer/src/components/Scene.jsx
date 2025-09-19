@@ -11,6 +11,9 @@ import { stepPotts27 } from '../lib/potts27.js';
 export function Scene() {
   const {
     cubes,
+    mode,
+    alpha,
+    tau0,
     drop,
     slice,
     showLabels,
@@ -34,6 +37,9 @@ export function Scene() {
         showNames={showLabels}
         hidden={hidden}
         shared={shared}
+        mode={mode}
+        alpha={alpha}
+        tau0={tau0}
       />
     );
   };
