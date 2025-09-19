@@ -32,6 +32,7 @@ const BUTTON_LABELS = {
   'dpad-right': 'D-Pad →',
 };
 
+
 const AXIS_LABELS = {
   '0:positive': 'LS →',
   '0:negative': 'LS ←',
@@ -72,6 +73,7 @@ export function HelpOverlay({ isOpen, onClose, mapping }) {
     return {
       label: intent.label,
       binding: bindingLabel,
+
     };
   }).filter(Boolean);
 

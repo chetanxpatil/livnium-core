@@ -11,6 +11,7 @@ export type Intent =
   | { type: 'selection/slice'; delta: -1 | 1 }
   | { type: 'selection/rotate'; direction: 'cw' | 'ccw' | 'half' }
   | { type: 'selection/confirm' }
+
   | { type: 'param/alpha'; delta: number }
   | { type: 'param/tau0'; delta: number }
   | { type: 'potts/start' }
@@ -59,6 +60,7 @@ export type AxisBinding = {
 export type ControlBinding = ButtonBinding | AxisBinding;
 
 export type ControllerMapping = Record<string, ControlBinding>;
+
 
 export type GamepadStatus = {
   connected: boolean;
@@ -164,6 +166,7 @@ export function useGamepadIntents(
 
         const now = performance.now();
         for (const [intentName, binding] of Object.entries(mappingRef.current)) {
+
           if (!binding) continue;
           let pressed = false;
           let analogValue = 1;
@@ -188,15 +191,18 @@ export function useGamepadIntents(
           const repeatState = repeatRef.current[intentName] ?? { active: false, nextFire: 0 };
           const allowRepeat = Boolean((binding as ButtonBinding | AxisBinding).repeat);
 
+
           if (pressed && !prevPressed) {
             fireIntent(intentName, analogValue);
             repeatRef.current[intentName] = {
+
               active: allowRepeat,
               nextFire: now + (allowRepeat ? 250 : Number.POSITIVE_INFINITY),
             };
           } else if (!pressed && prevPressed) {
             repeatRef.current[intentName] = { active: allowRepeat, nextFire: 0 };
           } else if (pressed && allowRepeat && repeatState.active && now >= repeatState.nextFire) {
+
             fireIntent(intentName, analogValue);
             repeatState.nextFire = now + 100;
             repeatRef.current[intentName] = repeatState;

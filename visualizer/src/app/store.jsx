@@ -171,6 +171,7 @@ export function StoreProvider({ children }) {
       return { axis: selectedAxis, slice: selectedSlice };
     });
   };
+
   const adjustAlpha = (delta) => setAlpha((prev) => Math.max(0, Math.min(3, prev + delta)));
   const adjustTau0 = (delta) => setTau0((prev) => Math.max(0.1, Math.min(2, prev + delta)));
 

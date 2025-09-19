@@ -26,6 +26,7 @@ export function LeftDock() {
     rotateSelection,
     confirmSelection,
     selection,
+
     alpha,
     setAlpha,
     tau0,
@@ -48,6 +49,7 @@ export function LeftDock() {
     { label: 'Y Axis', value: 'y' },
     { label: 'Z Axis', value: 'z' },
   ];
+
 
   return (
     <aside

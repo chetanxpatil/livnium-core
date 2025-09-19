@@ -95,12 +95,14 @@ export function SettingsModal({ isOpen, onClose }) {
                     return axisLabels[key] ?? `Axis ${binding.axis}`;
                   })()
                 : null;
+
             return (
               <div key={id} className="bg-white/5 border border-white/10 rounded-lg p-4">
                 <div className="text-sm text-white/80">{intent.label}</div>
                 <div className="text-xs text-white/40 mb-2">{intent.category}</div>
                 <select
                   value={binding?.type === 'button' ? binding.button : ''}
+
                   onChange={(e) => handleBindingChange(id, e.target.value)}
                   className="w-full bg-black/40 border border-white/20 rounded px-2 py-1 text-white"
                 >
@@ -114,6 +116,7 @@ export function SettingsModal({ isOpen, onClose }) {
                 {bindingLabel && (
                   <div className="text-[11px] text-white/50 mt-2">Default: {bindingLabel} (analog)</div>
                 )}
+
               </div>
             );
           })}

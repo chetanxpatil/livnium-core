@@ -2,9 +2,11 @@ import React from 'react';
 import { useStore } from '../app/store.jsx';
 
 export function StatusBar({ gamepadStatus }) {
+
   const { mode, labelMode, drop, slice, temperature, isPottsRunning, selectedAxis, selectedSlice, selection } = useStore();
   const activeAxis = selection?.axis ?? selectedAxis;
   const activeSlice = selection?.slice ?? selectedSlice;
+
   const connected = gamepadStatus?.connected;
 
   return (
@@ -30,6 +32,7 @@ export function StatusBar({ gamepadStatus }) {
           Selected Layer:
           <strong className="ml-1 text-white">{`${activeAxis.toUpperCase()} @ ${activeSlice > 0 ? `+${activeSlice}` : activeSlice}`}</strong>
         </span>
+
       </div>
       <div className="text-white/80">
         Potts: {isPottsRunning ? 'Running' : 'Stopped'} · Temp {temperature.toFixed(2)}

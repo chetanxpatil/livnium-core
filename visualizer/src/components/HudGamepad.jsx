@@ -38,6 +38,7 @@ function describeBinding(binding) {
   return AXIS_LABELS[key] ?? `Axis ${binding.axis} ${binding.direction === 'positive' ? '+' : '-'}`;
 }
 
+
 function formatTime(timestamp) {
   const date = new Date(timestamp);
   return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
@@ -48,6 +49,7 @@ export function HudGamepad({ status, history, mapping }) {
   const id = status?.id ?? 'No controller';
   const axes = status?.axes ?? [];
 
+
   const legend = Object.entries(mapping ?? {})
     .map(([intentName, binding]) => {
       const intent = IntentCatalog[intentName];
@@ -55,6 +57,7 @@ export function HudGamepad({ status, history, mapping }) {
       return { intent, binding };
     })
     .filter(Boolean);
+
 
   return (
     <div className="pointer-events-none fixed bottom-4 right-4 w-80 bg-black/60 border border-white/10 rounded-xl p-4 text-white/80 space-y-3 shadow-xl backdrop-blur">
@@ -110,6 +113,7 @@ export function HudGamepad({ status, history, mapping }) {
             legend.slice(0, 8).map(({ intent, binding }) => (
               <div key={intent.id} className="bg-white/5 px-2 py-1 rounded">
                 <div className="text-white/60">{describeBinding(binding)}</div>
+
                 <div className="text-white/90 font-medium">{intent.label}</div>
               </div>
             ))

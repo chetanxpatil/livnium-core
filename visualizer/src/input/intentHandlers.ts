@@ -12,6 +12,7 @@ type StoreLike = {
   adjustSelectedSlice: (delta: number) => void;
   rotateSelection: (direction: 'cw' | 'ccw' | 'half') => void;
   confirmSelection: () => void;
+
   adjustAlpha: (delta: number) => void;
   adjustTau0: (delta: number) => void;
   startPotts: () => void;
@@ -87,6 +88,7 @@ export function handleIntent(intent: Intent, store: StoreLike) {
     case 'selection/confirm':
       store.confirmSelection();
       return;
+
     case 'param/alpha':
       store.adjustAlpha(intent.delta);
       return;

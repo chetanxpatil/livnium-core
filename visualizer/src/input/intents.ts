@@ -18,6 +18,7 @@ export const IntentNames = Object.freeze({
   selectionRotateCw: 'selection/rotate:cw',
   selectionRotateHalf: 'selection/rotate:half',
   selectionConfirm: 'selection/confirm',
+
   alphaDecrease: 'param/alpha/dec',
   alphaIncrease: 'param/alpha/inc',
   tauDecrease: 'param/tau/dec',
@@ -149,6 +150,7 @@ export const IntentCatalog: Record<IntentName, IntentDefinition> = {
     category: 'Selection',
     create: () => ({ type: 'selection/confirm' }),
   },
+
   [IntentNames.alphaDecrease]: {
     id: 'param/alpha/dec',
     label: 'Alpha -',
@@ -230,6 +232,7 @@ export const IntentCatalog: Record<IntentName, IntentDefinition> = {
 };
 
 export const IntentGroups = ['Mode', 'Drop', 'Slice', 'Selection', 'Parameters', 'View', 'Potts', 'Moves', 'UI'];
+
 
 export function createIntentFromName(name: string, options?: IntentFactoryOptions): Intent | null {
   const def = IntentCatalog[name];

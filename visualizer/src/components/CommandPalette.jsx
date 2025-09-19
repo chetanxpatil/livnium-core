@@ -41,7 +41,6 @@ function describeBinding(binding) {
   const key = `${binding.axis}:${binding.direction}`;
   return AXIS_LABELS[key] ?? `Axis ${binding.axis} ${binding.direction === 'positive' ? '+' : '-'}`;
 }
-
 export function CommandPalette({ isOpen, onClose, mapping }) {
   const store = useStore();
   const [query, setQuery] = useState('');
@@ -129,6 +128,7 @@ export function CommandPalette({ isOpen, onClose, mapping }) {
                   {binding && (
                     <span className="text-xs text-white/60 border border-white/10 rounded px-2 py-1">
                       {describeBinding(binding)}
+
                     </span>
                   )}
                 </button>
