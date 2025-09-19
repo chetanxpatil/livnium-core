@@ -8,6 +8,11 @@ type StoreLike = {
   setDrop: (axis: 'none' | 'x' | 'y' | 'z') => void;
   drop: 'none' | 'x' | 'y' | 'z';
   adjustSlice: (delta: number) => void;
+  cycleSelectedAxis: (delta: number) => void;
+  adjustSelectedSlice: (delta: number) => void;
+  rotateSelection: (direction: 'cw' | 'ccw' | 'half') => void;
+  confirmSelection: () => void;
+
   adjustAlpha: (delta: number) => void;
   adjustTau0: (delta: number) => void;
   startPotts: () => void;
@@ -71,6 +76,19 @@ export function handleIntent(intent: Intent, store: StoreLike) {
     case 'slice/inc':
       store.adjustSlice(intent.delta);
       return;
+    case 'selection/axis':
+      store.cycleSelectedAxis(intent.delta);
+      return;
+    case 'selection/slice':
+      store.adjustSelectedSlice(intent.delta);
+      return;
+    case 'selection/rotate':
+      store.rotateSelection(intent.direction);
+      return;
+    case 'selection/confirm':
+      store.confirmSelection();
+      return;
+
     case 'param/alpha':
       store.adjustAlpha(intent.delta);
       return;

@@ -10,6 +10,15 @@ export const IntentNames = Object.freeze({
   dropCycle: 'drop/cycle',
   sliceDecrease: 'slice/dec',
   sliceIncrease: 'slice/inc',
+  selectionAxisPrev: 'selection/axis:prev',
+  selectionAxisNext: 'selection/axis:next',
+  selectionSliceDecrease: 'selection/slice:dec',
+  selectionSliceIncrease: 'selection/slice:inc',
+  selectionRotateCcw: 'selection/rotate:ccw',
+  selectionRotateCw: 'selection/rotate:cw',
+  selectionRotateHalf: 'selection/rotate:half',
+  selectionConfirm: 'selection/confirm',
+
   alphaDecrease: 'param/alpha/dec',
   alphaIncrease: 'param/alpha/inc',
   tauDecrease: 'param/tau/dec',
@@ -93,6 +102,55 @@ export const IntentCatalog: Record<IntentName, IntentDefinition> = {
     category: 'Slice',
     create: () => ({ type: 'slice/inc', delta: 1 }),
   },
+  [IntentNames.selectionAxisPrev]: {
+    id: 'selection/axis:prev',
+    label: 'Previous Axis',
+    category: 'Selection',
+    create: () => ({ type: 'selection/axis', delta: -1 }),
+  },
+  [IntentNames.selectionAxisNext]: {
+    id: 'selection/axis:next',
+    label: 'Next Axis',
+    category: 'Selection',
+    create: () => ({ type: 'selection/axis', delta: 1 }),
+  },
+  [IntentNames.selectionSliceDecrease]: {
+    id: 'selection/slice:dec',
+    label: 'Selection Slice -',
+    category: 'Selection',
+    create: () => ({ type: 'selection/slice', delta: -1 }),
+  },
+  [IntentNames.selectionSliceIncrease]: {
+    id: 'selection/slice:inc',
+    label: 'Selection Slice +',
+    category: 'Selection',
+    create: () => ({ type: 'selection/slice', delta: 1 }),
+  },
+  [IntentNames.selectionRotateCcw]: {
+    id: 'selection/rotate:ccw',
+    label: 'Rotate Selection CCW',
+    category: 'Selection',
+    create: () => ({ type: 'selection/rotate', direction: 'ccw' }),
+  },
+  [IntentNames.selectionRotateCw]: {
+    id: 'selection/rotate:cw',
+    label: 'Rotate Selection CW',
+    category: 'Selection',
+    create: () => ({ type: 'selection/rotate', direction: 'cw' }),
+  },
+  [IntentNames.selectionRotateHalf]: {
+    id: 'selection/rotate:half',
+    label: 'Rotate Selection 180°',
+    category: 'Selection',
+    create: () => ({ type: 'selection/rotate', direction: 'half' }),
+  },
+  [IntentNames.selectionConfirm]: {
+    id: 'selection/confirm',
+    label: 'Confirm Selection',
+    category: 'Selection',
+    create: () => ({ type: 'selection/confirm' }),
+  },
+
   [IntentNames.alphaDecrease]: {
     id: 'param/alpha/dec',
     label: 'Alpha -',
@@ -173,7 +231,8 @@ export const IntentCatalog: Record<IntentName, IntentDefinition> = {
   },
 };
 
-export const IntentGroups = ['Mode', 'Drop', 'Slice', 'Parameters', 'View', 'Potts', 'Moves', 'UI'];
+export const IntentGroups = ['Mode', 'Drop', 'Slice', 'Selection', 'Parameters', 'View', 'Potts', 'Moves', 'UI'];
+
 
 export function createIntentFromName(name: string, options?: IntentFactoryOptions): Intent | null {
   const def = IntentCatalog[name];

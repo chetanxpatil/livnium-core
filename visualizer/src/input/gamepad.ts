@@ -7,6 +7,11 @@ export type Intent =
   | { type: 'drop/set'; axis: 'none' | 'x' | 'y' | 'z' }
   | { type: 'drop/cycle' }
   | { type: 'slice/inc'; delta: -1 | 1 }
+  | { type: 'selection/axis'; delta: -1 | 1 }
+  | { type: 'selection/slice'; delta: -1 | 1 }
+  | { type: 'selection/rotate'; direction: 'cw' | 'ccw' | 'half' }
+  | { type: 'selection/confirm' }
+
   | { type: 'param/alpha'; delta: number }
   | { type: 'param/tau0'; delta: number }
   | { type: 'potts/start' }
@@ -43,7 +48,19 @@ export type ButtonBinding = {
   analog?: boolean;
 };
 
-export type ControllerMapping = Record<string, ButtonBinding>;
+export type AxisBinding = {
+  type: 'axis';
+  axis: number;
+  direction: 'positive' | 'negative';
+  threshold?: number;
+  repeat?: boolean;
+  scale?: number;
+};
+
+export type ControlBinding = ButtonBinding | AxisBinding;
+
+export type ControllerMapping = Record<string, ControlBinding>;
+
 
 export type GamepadStatus = {
   connected: boolean;
@@ -149,25 +166,43 @@ export function useGamepadIntents(
 
         const now = performance.now();
         for (const [intentName, binding] of Object.entries(mappingRef.current)) {
-          if (!binding || binding.type !== 'button') continue;
-          const indices = getButtonsFor(layout, binding.button);
-          if (!indices.length) continue;
-          const pressed = indices.some((idx) => pad.buttons[idx]?.pressed ?? false);
-          const analogValue = binding.analog
-            ? Math.max(...indices.map((idx) => pad.buttons[idx]?.value ?? 0))
-            : 1;
+
+          if (!binding) continue;
+          let pressed = false;
+          let analogValue = 1;
+
+          if (binding.type === 'button') {
+            const indices = getButtonsFor(layout, binding.button);
+            if (!indices.length) continue;
+            pressed = indices.some((idx) => pad.buttons[idx]?.pressed ?? false);
+            analogValue = binding.analog
+              ? Math.max(...indices.map((idx) => pad.buttons[idx]?.value ?? 0))
+              : 1;
+          } else if (binding.type === 'axis') {
+            const value = pad.axes[binding.axis] ?? 0;
+            const threshold = binding.threshold ?? 0.25;
+            const isPositive = binding.direction === 'positive';
+            analogValue = Math.abs(value);
+            pressed = isPositive ? value >= threshold : value <= -threshold;
+            if (binding.scale) analogValue *= binding.scale;
+          }
+
           const prevPressed = prevPressedRef.current[intentName] ?? false;
           const repeatState = repeatRef.current[intentName] ?? { active: false, nextFire: 0 };
+          const allowRepeat = Boolean((binding as ButtonBinding | AxisBinding).repeat);
+
 
           if (pressed && !prevPressed) {
             fireIntent(intentName, analogValue);
             repeatRef.current[intentName] = {
-              active: Boolean(binding.repeat),
-              nextFire: now + (binding.repeat ? 250 : Number.POSITIVE_INFINITY),
+
+              active: allowRepeat,
+              nextFire: now + (allowRepeat ? 250 : Number.POSITIVE_INFINITY),
             };
           } else if (!pressed && prevPressed) {
-            repeatRef.current[intentName] = { active: Boolean(binding.repeat), nextFire: 0 };
-          } else if (pressed && binding.repeat && repeatState.active && now >= repeatState.nextFire) {
+            repeatRef.current[intentName] = { active: allowRepeat, nextFire: 0 };
+          } else if (pressed && allowRepeat && repeatState.active && now >= repeatState.nextFire) {
+
             fireIntent(intentName, analogValue);
             repeatState.nextFire = now + 100;
             repeatRef.current[intentName] = repeatState;

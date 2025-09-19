@@ -17,6 +17,16 @@ export function LeftDock() {
     setDrop,
     slice,
     setSlice,
+    selectedAxis,
+    setSelectedAxis,
+    cycleSelectedAxis,
+    selectedSlice,
+    setSelectedSlice,
+    adjustSelectedSlice,
+    rotateSelection,
+    confirmSelection,
+    selection,
+
     alpha,
     setAlpha,
     tau0,
@@ -33,6 +43,13 @@ export function LeftDock() {
   } = useStore();
 
   const collapsed = !ui.leftDockOpen;
+
+  const axisOptions = [
+    { label: 'X Axis', value: 'x' },
+    { label: 'Y Axis', value: 'y' },
+    { label: 'Z Axis', value: 'z' },
+  ];
+
 
   return (
     <aside
@@ -68,6 +85,96 @@ export function LeftDock() {
                 </button>
               ))}
             </div>
+          </section>
+
+          <section className="space-y-3">
+            <div className="flex items-center justify-between">
+              <h2 className="text-xs uppercase tracking-wide text-white/50">Layer Selection</h2>
+              <button
+                className="text-[11px] text-white/50 hover:text-white"
+                onClick={() => cycleSelectedAxis(1)}
+              >
+                Cycle Axis
+              </button>
+            </div>
+            <div className="grid grid-cols-3 gap-2">
+              {axisOptions.map((axis) => (
+                <button
+                  key={axis.value}
+                  onClick={() => setSelectedAxis(axis.value)}
+                  className={`px-2 py-2 rounded-lg border text-sm transition ${
+                    selectedAxis === axis.value
+                      ? 'border-emerald-400/70 text-emerald-200 bg-emerald-500/10'
+                      : 'border-white/10 text-white/70 hover:text-white hover:bg-white/10'
+                  }`}
+                >
+                  {axis.label}
+                </button>
+              ))}
+            </div>
+            <div>
+              <div className="text-xs uppercase tracking-wide text-white/50 mb-2">Slice</div>
+              <div className="flex items-center gap-2">
+                {[-1, 0, 1].map((value) => (
+                  <button
+                    key={value}
+                    onClick={() => setSelectedSlice(value)}
+                    className={`px-3 py-2 rounded-lg border text-sm transition ${
+                      selectedSlice === value
+                        ? 'border-emerald-400/70 text-emerald-200 bg-emerald-500/10'
+                        : 'border-white/10 text-white/70 hover:text-white hover:bg-white/10'
+                    }`}
+                  >
+                    {value > 0 ? `+${value}` : value}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                onClick={() => adjustSelectedSlice(-1)}
+                className="px-3 py-2 rounded-lg border border-white/10 text-sm text-white/70 hover:text-white hover:bg-white/10"
+              >
+                Slice -
+              </button>
+              <button
+                onClick={() => adjustSelectedSlice(1)}
+                className="px-3 py-2 rounded-lg border border-white/10 text-sm text-white/70 hover:text-white hover:bg-white/10"
+              >
+                Slice +
+              </button>
+            </div>
+            <div className="grid grid-cols-3 gap-2">
+              <button
+                onClick={() => rotateSelection('ccw')}
+                className="px-2 py-2 rounded-lg border border-white/10 text-sm text-white/70 hover:text-white hover:bg-white/10"
+              >
+                ⟲ CCW
+              </button>
+              <button
+                onClick={() => rotateSelection('cw')}
+                className="px-2 py-2 rounded-lg border border-white/10 text-sm text-white/70 hover:text-white hover:bg-white/10"
+              >
+                ⟳ CW
+              </button>
+              <button
+                onClick={() => rotateSelection('half')}
+                className="px-2 py-2 rounded-lg border border-white/10 text-sm text-white/70 hover:text-white hover:bg-white/10"
+              >
+                180°
+              </button>
+            </div>
+            <button
+              onClick={confirmSelection}
+              className="w-full px-3 py-2 rounded-lg border border-white/10 text-sm text-white/70 hover:text-white hover:bg-white/10"
+            >
+              Confirm Selection
+            </button>
+            {selection && (
+              <div className="text-xs text-white/50">
+                Locked: {selection.axis.toUpperCase()} @ {selection.slice > 0 ? `+${selection.slice}` : selection.slice}
+              </div>
+            )}
           </section>
 
           <section>

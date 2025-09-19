@@ -24,6 +24,23 @@ const BUTTON_LABELS = {
   'dpad-right': 'D-Pad →',
 };
 
+const AXIS_LABELS = {
+  '0:positive': 'LS →',
+  '0:negative': 'LS ←',
+  '1:positive': 'LS ↓',
+  '1:negative': 'LS ↑',
+  '2:positive': 'RS →',
+  '2:negative': 'RS ←',
+  '3:positive': 'RS ↓',
+  '3:negative': 'RS ↑',
+};
+
+function describeBinding(binding) {
+  if (!binding) return null;
+  if (binding.type === 'button') return BUTTON_LABELS[binding.button] ?? binding.button;
+  const key = `${binding.axis}:${binding.direction}`;
+  return AXIS_LABELS[key] ?? `Axis ${binding.axis} ${binding.direction === 'positive' ? '+' : '-'}`;
+}
 export function CommandPalette({ isOpen, onClose, mapping }) {
   const store = useStore();
   const [query, setQuery] = useState('');
@@ -108,9 +125,10 @@ export function CommandPalette({ isOpen, onClose, mapping }) {
                     <div className="text-sm text-white">{cmd.label}</div>
                     <div className="text-xs text-white/50">{cmd.category}</div>
                   </div>
-                  {binding && binding.type === 'button' && (
+                  {binding && (
                     <span className="text-xs text-white/60 border border-white/10 rounded px-2 py-1">
-                      {BUTTON_LABELS[binding.button] ?? binding.button}
+                      {describeBinding(binding)}
+
                     </span>
                   )}
                 </button>

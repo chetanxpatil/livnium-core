@@ -20,6 +20,25 @@ const BUTTON_LABELS = {
   'dpad-right': 'D-Pad →',
 };
 
+const AXIS_LABELS = {
+  '0:positive': 'LS →',
+  '0:negative': 'LS ←',
+  '1:positive': 'LS ↓',
+  '1:negative': 'LS ↑',
+  '2:positive': 'RS →',
+  '2:negative': 'RS ←',
+  '3:positive': 'RS ↓',
+  '3:negative': 'RS ↑',
+};
+
+function describeBinding(binding) {
+  if (!binding) return '';
+  if (binding.type === 'button') return BUTTON_LABELS[binding.button] ?? binding.button;
+  const key = `${binding.axis}:${binding.direction}`;
+  return AXIS_LABELS[key] ?? `Axis ${binding.axis} ${binding.direction === 'positive' ? '+' : '-'}`;
+}
+
+
 function formatTime(timestamp) {
   const date = new Date(timestamp);
   return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
@@ -30,14 +49,15 @@ export function HudGamepad({ status, history, mapping }) {
   const id = status?.id ?? 'No controller';
   const axes = status?.axes ?? [];
 
-  const legend = Object.entries(mapping ?? {}).map(([intentName, binding]) => {
-    const intent = IntentCatalog[intentName];
-    if (!intent || binding.type !== 'button') return null;
-    return {
-      intent,
-      binding,
-    };
-  }).filter(Boolean);
+
+  const legend = Object.entries(mapping ?? {})
+    .map(([intentName, binding]) => {
+      const intent = IntentCatalog[intentName];
+      if (!intent) return null;
+      return { intent, binding };
+    })
+    .filter(Boolean);
+
 
   return (
     <div className="pointer-events-none fixed bottom-4 right-4 w-80 bg-black/60 border border-white/10 rounded-xl p-4 text-white/80 space-y-3 shadow-xl backdrop-blur">
@@ -92,7 +112,8 @@ export function HudGamepad({ status, history, mapping }) {
           {legend.length > 0 ? (
             legend.slice(0, 8).map(({ intent, binding }) => (
               <div key={intent.id} className="bg-white/5 px-2 py-1 rounded">
-                <div className="text-white/60">{BUTTON_LABELS[binding.button] ?? binding.button}</div>
+                <div className="text-white/60">{describeBinding(binding)}</div>
+
                 <div className="text-white/90 font-medium">{intent.label}</div>
               </div>
             ))

@@ -32,6 +32,18 @@ const BUTTON_LABELS = {
   'dpad-right': 'D-Pad →',
 };
 
+
+const AXIS_LABELS = {
+  '0:positive': 'LS →',
+  '0:negative': 'LS ←',
+  '1:positive': 'LS ↓',
+  '1:negative': 'LS ↑',
+  '2:positive': 'RS →',
+  '2:negative': 'RS ←',
+  '3:positive': 'RS ↓',
+  '3:negative': 'RS ↑',
+};
+
 export function HelpOverlay({ isOpen, onClose, mapping }) {
   const { resetControllerMapping } = useStore();
 
@@ -52,9 +64,16 @@ export function HelpOverlay({ isOpen, onClose, mapping }) {
   const entries = Object.entries(mapping ?? {}).map(([intentName, binding]) => {
     const intent = IntentCatalog[intentName];
     if (!intent) return null;
+    let bindingLabel = '—';
+    if (binding?.type === 'button') bindingLabel = BUTTON_LABELS[binding.button] ?? binding.button;
+    if (binding?.type === 'axis') {
+      const key = `${binding.axis}:${binding.direction}`;
+      bindingLabel = AXIS_LABELS[key] ?? `Axis ${binding.axis} ${binding.direction === 'positive' ? '+' : '-'}`;
+    }
     return {
       label: intent.label,
-      binding: binding?.type === 'button' ? BUTTON_LABELS[binding.button] ?? binding.button : '—',
+      binding: bindingLabel,
+
     };
   }).filter(Boolean);
 

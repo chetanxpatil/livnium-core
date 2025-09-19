@@ -62,8 +62,12 @@ export function SettingsModal({ isOpen, onClose }) {
       });
       return;
     }
-    const current = mapping[intentName] ?? { type: 'button', button: value };
-    setControllerMapping(intentName, { ...current, button: value });
+    const current = mapping[intentName];
+    const nextBinding =
+      current && current.type === 'button'
+        ? { ...current, button: value }
+        : { type: 'button', button: value };
+    setControllerMapping(intentName, nextBinding);
   };
 
   const renderControllerTab = () => {
@@ -74,12 +78,31 @@ export function SettingsModal({ isOpen, onClose }) {
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {entries.map(([id, intent]) => {
             const binding = mapping[id];
+            const bindingLabel =
+              binding?.type === 'axis'
+                ? (() => {
+                    const key = `${binding.axis}:${binding.direction}`;
+                    const axisLabels = {
+                      '0:positive': 'LS →',
+                      '0:negative': 'LS ←',
+                      '1:positive': 'LS ↓',
+                      '1:negative': 'LS ↑',
+                      '2:positive': 'RS →',
+                      '2:negative': 'RS ←',
+                      '3:positive': 'RS ↓',
+                      '3:negative': 'RS ↑',
+                    };
+                    return axisLabels[key] ?? `Axis ${binding.axis}`;
+                  })()
+                : null;
+
             return (
               <div key={id} className="bg-white/5 border border-white/10 rounded-lg p-4">
                 <div className="text-sm text-white/80">{intent.label}</div>
                 <div className="text-xs text-white/40 mb-2">{intent.category}</div>
                 <select
-                  value={binding?.button ?? ''}
+                  value={binding?.type === 'button' ? binding.button : ''}
+
                   onChange={(e) => handleBindingChange(id, e.target.value)}
                   className="w-full bg-black/40 border border-white/20 rounded px-2 py-1 text-white"
                 >
@@ -90,6 +113,10 @@ export function SettingsModal({ isOpen, onClose }) {
                     </option>
                   ))}
                 </select>
+                {bindingLabel && (
+                  <div className="text-[11px] text-white/50 mt-2">Default: {bindingLabel} (analog)</div>
+                )}
+
               </div>
             );
           })}

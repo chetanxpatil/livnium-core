@@ -2,6 +2,7 @@ import React, { createContext, useContext, useEffect, useState } from 'react';
 import { createPotts27 } from '../lib/potts27.js';
 import { applyMoves } from '../lib/moves.js';
 import { IntentNames } from '../input/intents.ts';
+import { AXES, clampSliceIndex, directionToTurns, rotateLayer } from '../lib/selectionMoves.js';
 
 const STORAGE_KEY = 'livnium-visualizer-settings';
 
@@ -9,17 +10,19 @@ const DEFAULT_CONTROLLER_MAPPING = {
   [IntentNames.modeToggle]: { type: 'button', button: 'south' },
   [IntentNames.pottsReset]: { type: 'button', button: 'east' },
   [IntentNames.toggleLabels]: { type: 'button', button: 'west' },
-  [IntentNames.toggleAxes]: { type: 'button', button: 'north' },
-  [IntentNames.sliceDecrease]: { type: 'button', button: 'dpad-left', repeat: true },
-  [IntentNames.sliceIncrease]: { type: 'button', button: 'dpad-right', repeat: true },
-  [IntentNames.dropX]: { type: 'button', button: 'dpad-down' },
-  [IntentNames.dropY]: { type: 'button', button: 'dpad-up' },
-  [IntentNames.tauDecrease]: { type: 'button', button: 'l1', analog: false },
-  [IntentNames.tauIncrease]: { type: 'button', button: 'r1', analog: false },
+  [IntentNames.selectionSliceDecrease]: { type: 'button', button: 'dpad-left', repeat: true },
+  [IntentNames.selectionSliceIncrease]: { type: 'button', button: 'dpad-right', repeat: true },
+  [IntentNames.selectionAxisPrev]: { type: 'button', button: 'dpad-up', repeat: true },
+  [IntentNames.selectionAxisNext]: { type: 'button', button: 'dpad-down', repeat: true },
+  [IntentNames.selectionRotateCcw]: { type: 'button', button: 'l1' },
+  [IntentNames.selectionRotateCw]: { type: 'button', button: 'r1' },
+  [IntentNames.tauDecrease]: { type: 'axis', axis: 3, direction: 'positive', repeat: true, threshold: 0.3 },
+  [IntentNames.tauIncrease]: { type: 'axis', axis: 3, direction: 'negative', repeat: true, threshold: 0.3 },
   [IntentNames.alphaDecrease]: { type: 'button', button: 'l2', analog: true },
   [IntentNames.alphaIncrease]: { type: 'button', button: 'r2', analog: true },
-  [IntentNames.dropCycle]: { type: 'button', button: 'ls' },
+  [IntentNames.selectionConfirm]: { type: 'button', button: 'ls' },
   [IntentNames.labelsCycle]: { type: 'button', button: 'rs' },
+  [IntentNames.toggleAxes]: { type: 'button', button: 'north' },
   [IntentNames.openPalette]: { type: 'button', button: 'share' },
   [IntentNames.pottsStart]: { type: 'button', button: 'options' },
 };
@@ -60,6 +63,8 @@ export function StoreProvider({ children }) {
   const [showLabels, setShowLabels] = useState(false);
   const [labelMode, setLabelMode] = useState('xyz');
   const [selection, setSelection] = useState(null);
+  const [selectedAxis, setSelectedAxis] = useState('x');
+  const [selectedSlice, setSelectedSlice] = useState(0);
   const [showAxes, setShowAxes] = useState(true);
   const [pottsModel, setPottsModel] = useState(createPotts27(3));
   const [temperature, setTemperature] = useState(1);
@@ -142,6 +147,31 @@ export function StoreProvider({ children }) {
     });
   const clampSlice = (value) => Math.max(-1, Math.min(1, value));
   const adjustSlice = (delta) => setSlice((prev) => clampSlice(prev + delta));
+  const cycleSelectedAxis = (delta) =>
+    setSelectedAxis((prev) => {
+      const index = AXES.indexOf(prev);
+      const nextIndex = (index + delta + AXES.length) % AXES.length;
+      return AXES[nextIndex];
+    });
+  const adjustSelectedSlice = (delta) =>
+    setSelectedSlice((prev) => clampSliceIndex(prev + delta));
+  const rotateSelection = (direction) => {
+    const turns = directionToTurns(direction);
+    if (turns === 0) return;
+    const axis = selection?.axis ?? selectedAxis;
+    const sliceIndex = selection?.slice ?? selectedSlice;
+    setCubes((prev) => rotateLayer(prev, axis, sliceIndex, turns));
+  };
+
+  const confirmSelection = () => {
+    setSelection((prev) => {
+      if (prev && prev.axis === selectedAxis && prev.slice === selectedSlice) {
+        return null;
+      }
+      return { axis: selectedAxis, slice: selectedSlice };
+    });
+  };
+
   const adjustAlpha = (delta) => setAlpha((prev) => Math.max(0, Math.min(3, prev + delta)));
   const adjustTau0 = (delta) => setTau0((prev) => Math.max(0.1, Math.min(2, prev + delta)));
 
@@ -182,6 +212,8 @@ export function StoreProvider({ children }) {
     setLabelMode('xyz');
     setSelection(null);
     setShowAxes(true);
+    setSelectedAxis('x');
+    setSelectedSlice(0);
   };
 
   const resetPotts = () => {
@@ -205,6 +237,13 @@ export function StoreProvider({ children }) {
     setSlice,
     adjustSlice,
     cycleDrop,
+    selectedAxis,
+    setSelectedAxis,
+    cycleSelectedAxis,
+    selectedSlice,
+    setSelectedSlice,
+    adjustSelectedSlice,
+    rotateSelection,
     showLabels,
     setShowLabels,
     toggleShowLabels: () => setShowLabels((prev) => !prev),
@@ -213,6 +252,7 @@ export function StoreProvider({ children }) {
     cycleLabelMode,
     selection,
     setSelection,
+    confirmSelection,
     showAxes,
     setShowAxes,
     toggleShowAxes: () => setShowAxes((prev) => !prev),
