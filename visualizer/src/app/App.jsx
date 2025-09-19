@@ -6,8 +6,11 @@ import { TopBar } from '../components/TopBar.jsx';
 import { LeftControls } from '../components/LeftControls.jsx';
 import { Insights } from '../components/Insights.jsx';
 import { BottomStrip } from '../components/BottomStrip.jsx';
+import { useGamepad } from '../hooks/useGamepad.js';
 
 export function App() {
+  useGamepad();
+
   return (
     <StoreProvider>
       <div className="w-full h-full grid grid-rows-[auto_1fr_auto] grid-cols-[auto_1fr_auto] bg-neutral-950 text-white">
