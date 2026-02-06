@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Livnium Basin Engineering Visualizer</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/matter-js/0.19.0/matter.min.js"></script>
+    <style>
+        body { margin: 0; padding: 20px; font-family: 'Courier New', monospace; background: #111; color: #0f0; }
+        #canvas-container { border: 1px solid #333; margin-top: 10px; box-shadow: 0 0 20px rgba(0, 255, 0, 0.1); }
+        .controls { margin-bottom: 10px; display: flex; gap: 10px; flex-wrap: wrap; }
+        button {
+            padding: 10px 20px; font-size: 14px; cursor: pointer; border: 1px solid #0f0; background: #000; color: #0f0;
+            transition: all 0.2s; text-transform: uppercase; font-weight: bold;
+        }
+        button:hover { background: #0f0; color: #000; }
+        .status { margin-top: 10px; font-size: 14px; color: #888; }
+        #energy-readout { color: #fff; font-weight: bold; }
+        h1 { font-size: 18px; margin-bottom: 4px; }
+        .sub { color: #666; font-size: 12px; margin-bottom: 12px; }
+    </style>
+</head>
+<body>
+
+    <h1>Livnium Basin Engineering Visualizer</h1>
+    <p class="sub">D4 in motion: shape the geometry, not the ball. Reinforce = deepen the well. Diffuse = flatten + noise.</p>
+
+    <div class="controls">
+        <button onclick="reinforceBasin()">Reinforce (Correct)</button>
+        <button onclick="diffuseBasin()">Diffuse / Noise (Incorrect)</button>
+        <button onclick="resetBall()">Reset Particle</button>
+    </div>
+
+    <div id="canvas-container"></div>
+
+    <div class="status">
+        System State: <span id="energy-readout">Neutral Geometry</span>
+    </div>
+
+<script>
+// --- PHYSICS ENGINE SETUP ---
+const Engine = Matter.Engine,
+      Render = Matter.Render,
+      Runner = Matter.Runner,
+      Bodies = Matter.Bodies,
+      Composite = Matter.Composite,
+      Body = Matter.Body;
+
+const engine = Engine.create();
+const world = engine.world;
+
+const render = Render.create({
+    element: document.getElementById('canvas-container'),
+    engine: engine,
+    options: {
+        width: 800,
+        height: 600,
+        wireframes: false,
+        background: '#0a0a0a'
+    }
+});
+
+// --- SCENE OBJECTS ---
+let ball;
+const segments = [];
+const groundY = 500;
+const segmentWidth = 160;
+
+// Create 5 floor segments (The Geometry). Segment 2 is the "Target Basin"
+for (let i = 0; i < 5; i++) {
+    const isTarget = (i === 2);
+    const color = isTarget ? '#00ff00' : '#444';
+
+    const segment = Bodies.rectangle(
+        (i * segmentWidth) + (segmentWidth / 2),
+        groundY,
+        segmentWidth,
+        20,
+        {
+            isStatic: true,
+            friction: 0.1,
+            render: { fillStyle: color }
+        }
+    );
+    segments.push(segment);
+    Composite.add(world, segment);
+}
+
+// Walls
+Composite.add(world, [
+    Bodies.rectangle(-10, 300, 20, 600, { isStatic: true }),
+    Bodies.rectangle(810, 300, 20, 600, { isStatic: true })
+]);
+
+function spawnBall() {
+    if (ball) Composite.remove(world, ball);
+
+    ball = Bodies.circle(Math.random() * 700 + 50, 50, 20, {
+        restitution: 0.5,
+        friction: 0.05,
+        render: { fillStyle: '#fff' }
+    });
+    Composite.add(world, ball);
+}
+
+spawnBall();
+Render.run(render);
+const runner = Runner.create();
+Runner.run(runner, engine);
+
+// --- LIVNIUM LOGIC (Basin Engineering) ---
+
+function reinforceBasin() {
+    document.getElementById('energy-readout').innerText = "Reinforced: Basin Deepened (Alpha +)";
+    document.getElementById('energy-readout').style.color = "#0f0";
+
+    // Lower the target segment (center well)
+    Body.setPosition(segments[2], { x: segments[2].position.x, y: groundY + 100 });
+
+    // Angle neighbors into a funnel (V-shape)
+    Body.setPosition(segments[1], { x: segments[1].position.x, y: groundY + 50 });
+    Body.setAngle(segments[1], Math.PI / 6);
+
+    Body.setPosition(segments[3], { x: segments[3].position.x, y: groundY + 50 });
+    Body.setAngle(segments[3], -Math.PI / 6);
+
+    segments[2].friction = 1.0;
+}
+
+function diffuseBasin() {
+    document.getElementById('energy-readout').innerText = "Diffused: Geometry Flat + Noise Injected";
+    document.getElementById('energy-readout').style.color = "#f00";
+
+    segments.forEach((seg, i) => {
+        Body.setPosition(seg, { x: (i * segmentWidth) + (segmentWidth / 2), y: groundY });
+        Body.setAngle(seg, 0);
+        seg.friction = 0.1;
+    });
+
+    if (ball) {
+        const forceX = (Math.random() - 0.5) * 0.5;
+        const forceY = -0.5;
+        Body.applyForce(ball, ball.position, { x: forceX, y: forceY });
+    }
+}
+
+function resetBall() {
+    spawnBall();
+}
+</script>
+</body>
+</html>

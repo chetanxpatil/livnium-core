@@ -1,0 +1,512 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Path Search: Dijkstra vs Livnium Flow</title>
+  <style>
+    * { box-sizing: border-box; }
+    body { margin: 0; padding: 16px; font-family: system-ui, sans-serif; background: #1a1a1a; color: #e0e0e0; }
+    h1 { font-size: 1.25rem; margin-bottom: 4px; }
+    .sub { color: #888; font-size: 0.85rem; margin-bottom: 12px; }
+    .maps { display: flex; gap: 24px; flex-wrap: wrap; }
+    .map-box { background: #252525; padding: 12px; border-radius: 8px; }
+    .map-box h2 { margin: 0 0 8px 0; font-size: 1rem; }
+    .map-box .count { font-size: 0.8rem; color: #0f0; margin-bottom: 8px; }
+    canvas { display: block; border: 1px solid #333; border-radius: 4px; }
+    .legend { display: flex; gap: 16px; margin-top: 8px; font-size: 0.75rem; color: #888; }
+    .legend span { display: flex; align-items: center; gap: 4px; }
+    .legend .swatch { width: 12px; height: 12px; border-radius: 2px; }
+    button { margin-top: 12px; padding: 8px 16px; background: #333; color: #0f0; border: 1px solid #0f0; border-radius: 4px; cursor: pointer; }
+    button:hover { background: #0f0; color: #000; }
+    .speed-comp { margin-top: 20px; padding: 16px; background: #252525; border-radius: 8px; max-width: 500px; }
+    .speed-comp h3 { margin: 0 0 12px 0; font-size: 1rem; color: #0f0; }
+    .speed-row { display: flex; align-items: center; gap: 12px; margin-bottom: 8px; font-size: 0.9rem; }
+    .speed-row .label { width: 140px; }
+    .speed-row .bar-wrap { flex: 1; height: 20px; background: #333; border-radius: 4px; overflow: hidden; }
+    .speed-row .bar { height: 100%; border-radius: 4px; transition: width 0.3s; }
+    .speed-row .bar.dijkstra { background: #08f; }
+    .speed-row .bar.livnium { background: #0c8; }
+    .speed-row .bar.astar { background: #a0a; }
+    .speed-row .num { width: 60px; text-align: right; color: #fff; }
+    .speed-verdict { margin-top: 12px; padding: 10px; background: #1a2a1a; border-left: 4px solid #0f0; border-radius: 4px; font-size: 0.9rem; }
+    .no-path-badge { display: none; margin-top: 12px; padding: 12px 20px; background: #3a1a1a; border: 2px solid #c00; border-radius: 8px; font-size: 1rem; font-weight: bold; color: #f88; text-align: center; }
+    .no-path-badge.visible { display: block; }
+    .meta { margin-top: 8px; font-size: 0.8rem; color: #888; }
+  </style>
+</head>
+<body>
+  <h1>Path Search: Expanded Nodes (Science-Grade)</h1>
+  <p class="sub">All counts = <strong>expanded nodes</strong> (same metric). Left: Dijkstra. Right: Livnium Flow. Color = expansion order.</p>
+
+  <div class="maps">
+    <div class="map-box">
+      <h2>Dijkstra (Search)</h2>
+      <div class="count" id="dijkstra-count">Expanded: —</div>
+      <canvas id="canvas-dijkstra" width="400" height="400"></canvas>
+      <div class="legend">
+        <span><i class="swatch" style="background:#0f0;"></i> Start</span>
+        <span><i class="swatch" style="background:#f00;"></i> End</span>
+        <span><i class="swatch" style="background:#444;"></i> Wall</span>
+        <span><i class="swatch" style="background:#08f;"></i> Visited (early→late)</span>
+        <span><i class="swatch" style="background:#ff0;"></i> Path</span>
+      </div>
+    </div>
+    <div class="map-box">
+      <h2>Livnium Flow (A5 Polarity)</h2>
+      <div class="count" id="livnium-count">Expanded: —</div>
+      <canvas id="canvas-livnium" width="400" height="400"></canvas>
+      <div class="legend">
+        <span><i class="swatch" style="background:#0f0;"></i> Start</span>
+        <span><i class="swatch" style="background:#f00;"></i> End</span>
+        <span><i class="swatch" style="background:#444;"></i> Wall</span>
+        <span><i class="swatch" style="background:#08f;"></i> Visited (early→late)</span>
+        <span><i class="swatch" style="background:#ff0;"></i> Path</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="speed-comp" id="speed-comp">
+    <h3>Expanded-node comparison (same metric)</h3>
+    <div class="no-path-badge" id="no-path-badge">NO PATH</div>
+    <div class="meta" id="meta-line">—</div>
+    <div class="speed-row">
+      <span class="label">Dijkstra</span>
+      <span class="bar-wrap"><span class="bar dijkstra" id="bar-dijkstra" style="width:0%"></span></span>
+      <span class="num" id="num-dijkstra">—</span>
+    </div>
+    <div class="speed-row">
+      <span class="label">A*</span>
+      <span class="bar-wrap"><span class="bar astar" id="bar-astar" style="width:0%"></span></span>
+      <span class="num" id="num-astar">—</span>
+    </div>
+    <div class="speed-row">
+      <span class="label">Livnium Flow</span>
+      <span class="bar-wrap"><span class="bar livnium" id="bar-livnium" style="width:0%"></span></span>
+      <span class="num" id="num-livnium">—</span>
+    </div>
+    <div class="speed-verdict" id="speed-verdict">—</div>
+  </div>
+
+  <div style="margin-top: 12px; display: flex; gap: 8px; flex-wrap: wrap;">
+    <button id="btn-maze">New complicated maze</button>
+    <button id="btn-winding">New winding maze</button>
+    <button id="btn-random">New random obstacles</button>
+  </div>
+
+<script>
+(function() {
+  const SIZE = 20;
+  const CELL = 20; // px per cell -> 400x400
+
+  function key(p) { return p.x + ',' + p.y; }
+  function dist(a, b) {
+    const dx = b.x - a.x, dy = b.y - a.y;
+    return Math.sqrt(dx*dx + dy*dy);
+  }
+  function getNeighbors(p, walls) {
+    const d = [[-1,0],[1,0],[0,-1],[0,1]];
+    const out = [];
+    for (const [dx, dy] of d) {
+      const nx = p.x + dx, ny = p.y + dy;
+      if (nx < 0 || nx >= SIZE || ny < 0 || ny >= SIZE) continue;
+      const n = { x: nx, y: ny };
+      if (walls.has(key(n))) continue;
+      out.push(n);
+    }
+    return out;
+  }
+  function polarity(p, target) { return -dist(p, target); }
+
+  function runDijkstra(start, end, walls) {
+    const distMap = {}; distMap[key(start)] = 0;
+    const open = new Set([key(start)]);
+    const visitOrder = [];
+    const cameFrom = {};
+
+    while (open.size > 0) {
+      let best = null, bestD = Infinity;
+      for (const k of open) {
+        const d = distMap[k] ?? Infinity;
+        if (d < bestD) { bestD = d; best = k; }
+      }
+      const [cx, cy] = best.split(',').map(Number);
+      const current = { x: cx, y: cy };
+      open.delete(best);
+      visitOrder.push(current);
+      if (cx === end.x && cy === end.y) break;
+
+      const dCur = distMap[best] ?? Infinity;
+      for (const n of getNeighbors(current, walls)) {
+        const nk = key(n);
+        const dNew = dCur + 1;
+        if (dNew < (distMap[nk] ?? Infinity)) {
+          distMap[nk] = dNew;
+          cameFrom[nk] = current;
+          open.add(nk);
+        }
+      }
+    }
+
+    const path = [];
+    let cur = end;
+    while (cur) {
+      path.push(cur);
+      const k = key(cur);
+      cur = cameFrom[k] || null;
+    }
+    path.reverse();
+    return { visitOrder, path };
+  }
+
+  function manhattan(a, b) { return Math.abs(a.x - b.x) + Math.abs(a.y - b.y); }
+  function runAStar(start, end, walls) {
+    const gScore = {}; gScore[key(start)] = 0;
+    const fScore = {}; fScore[key(start)] = manhattan(start, end);
+    const open = new Set([key(start)]);
+    const visitOrder = [];
+    const cameFrom = {};
+
+    while (open.size > 0) {
+      let best = null, bestF = Infinity;
+      for (const k of open) {
+        const f = fScore[k] ?? Infinity;
+        if (f < bestF) { bestF = f; best = k; }
+      }
+      const [cx, cy] = best.split(',').map(Number);
+      const current = { x: cx, y: cy };
+      open.delete(best);
+      visitOrder.push(current);
+      if (cx === end.x && cy === end.y) break;
+
+      const gCur = gScore[best] ?? Infinity;
+      for (const n of getNeighbors(current, walls)) {
+        const nk = key(n);
+        const gNew = gCur + 1;
+        if (gNew >= (gScore[nk] ?? Infinity)) continue;
+        gScore[nk] = gNew;
+        fScore[nk] = gNew + manhattan(n, end);
+        cameFrom[nk] = current;
+        open.add(nk);
+      }
+    }
+    const path = [];
+    let cur = end;
+    while (cur) {
+      path.push(cur);
+      cur = cameFrom[key(cur)] || null;
+    }
+    path.reverse();
+    return { visitOrder, path };
+  }
+
+  function runLivnium(start, end, walls) {
+    const open = new Map();
+    open.set(key(start), start);
+    const visitOrder = [];
+    const cameFrom = {};
+
+    while (open.size > 0) {
+      let best = null, bestPol = -Infinity;
+      for (const p of open.values()) {
+        const pol = polarity(p, end);
+        if (pol > bestPol) { bestPol = pol; best = p; }
+      }
+      const k = key(best);
+      open.delete(k);
+      visitOrder.push(best);
+      if (best.x === end.x && best.y === end.y) break;
+
+      for (const n of getNeighbors(best, walls)) {
+        const nk = key(n);
+        if (!visitOrder.some(v => v.x === n.x && v.y === n.y)) {
+          open.set(nk, n);
+          if (!cameFrom[nk]) cameFrom[nk] = best;
+        }
+      }
+    }
+
+    const path = [];
+    let cur = end;
+    while (cur) {
+      path.push(cur);
+      const k = key(cur);
+      cur = cameFrom[k] || null;
+    }
+    path.reverse();
+    return { visitOrder, path };
+  }
+
+  function draw(ctx, start, end, walls, visitOrder, path, title) {
+    const maxVis = Math.max(visitOrder.length, 1);
+    ctx.fillStyle = '#0a0a0a';
+    ctx.fillRect(0, 0, SIZE * CELL, SIZE * CELL);
+
+    for (let i = 0; i < visitOrder.length; i++) {
+      const p = visitOrder[i];
+      const t = i / maxVis;
+      const r = Math.floor(20 + 235 * (1 - t));
+      const g = Math.floor(50 + 205 * (1 - t));
+      const b = 255;
+      ctx.fillStyle = `rgb(${r},${g},${b})`;
+      ctx.fillRect(p.x * CELL + 1, p.y * CELL + 1, CELL - 2, CELL - 2);
+    }
+
+    for (const w of walls) {
+      const [x, y] = w.split(',').map(Number);
+      ctx.fillStyle = '#444';
+      ctx.fillRect(x * CELL, y * CELL, CELL, CELL);
+    }
+
+    const pathSet = new Set(path.map(p => key(p)));
+    for (const p of path) {
+      ctx.fillStyle = '#ff0';
+      ctx.fillRect(p.x * CELL + 2, p.y * CELL + 2, CELL - 4, CELL - 4);
+    }
+
+    ctx.fillStyle = '#0f0';
+    ctx.fillRect(start.x * CELL + 2, start.y * CELL + 2, CELL - 4, CELL - 4);
+    ctx.fillStyle = '#f00';
+    ctx.fillRect(end.x * CELL + 2, end.y * CELL + 2, CELL - 4, CELL - 4);
+
+    ctx.strokeStyle = '#333';
+    ctx.lineWidth = 1;
+    for (let i = 0; i <= SIZE; i++) {
+      ctx.beginPath();
+      ctx.moveTo(i * CELL, 0);
+      ctx.lineTo(i * CELL, SIZE * CELL);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(0, i * CELL);
+      ctx.lineTo(SIZE * CELL, i * CELL);
+      ctx.stroke();
+    }
+  }
+
+  let state = { start: { x: 0, y: 0 }, end: { x: SIZE - 1, y: SIZE - 1 }, walls: new Set() };
+
+  function addDefaultWalls() {
+    const w = state.walls;
+    const mid = SIZE >> 1;
+    for (let i = 2; i < SIZE - 2; i++) {
+      if (i >= 8 && i <= 11) continue;
+      w.add(mid + ',' + i);
+    }
+    w.add((mid-1)+','+6);
+    w.add((mid+1)+','+6);
+  }
+
+  function randomMap() {
+    const w = new Set();
+    const start = { x: 0, y: 0 };
+    let end = { x: SIZE - 1, y: SIZE - 1 };
+    while (key(start) === key(end)) end = { x: (SIZE-1) * Math.random() | 0, y: (SIZE-1) * Math.random() | 0 };
+    const numWalls = 25 + (40 * Math.random() | 0);
+    for (let i = 0; i < numWalls; i++) {
+      const x = (SIZE * Math.random()) | 0;
+      const y = (SIZE * Math.random()) | 0;
+      const k = x + ',' + y;
+      if (k !== key(start) && k !== key(end)) w.add(k);
+    }
+    state.start = start;
+    state.end = end;
+    state.walls = w;
+    state.seed = Math.floor(Math.random() * 1e9);
+  }
+
+  // Recursive division: complicated maze with rooms and corridors (guaranteed path start↔end).
+  function generateMaze() {
+    const grid = Array(SIZE * SIZE).fill(0);
+    function idx(x, y) { return y * SIZE + x; }
+    function isProtected(x, y) {
+      return (x === 0 && y === 0) || (x === SIZE - 1 && y === SIZE - 1);
+    }
+
+    function divide(x, y, w, h) {
+      if (w < 2 || h < 2) return;
+      const splitCol = w > 2 ? x + 1 + (Math.random() * (w - 2) | 0) : x;
+      const splitRow = h > 2 ? y + 1 + (Math.random() * (h - 2) | 0) : y;
+
+      if (w >= 2 && splitCol >= x && splitCol < x + w) {
+        const gapRow = y + (Math.random() * h | 0);
+        for (let row = y; row < y + h; row++) {
+          if (row === gapRow) continue;
+          if (!isProtected(splitCol, row)) grid[idx(splitCol, row)] = 1;
+        }
+      }
+      if (h >= 2 && splitRow >= y && splitRow < y + h) {
+        const gapCol = x + (Math.random() * w | 0);
+        for (let col = x; col < x + w; col++) {
+          if (col === gapCol) continue;
+          if (!isProtected(col, splitRow)) grid[idx(col, splitRow)] = 1;
+        }
+      }
+
+      const w1 = splitCol - x, w2 = x + w - splitCol - 1;
+      const h1 = splitRow - y, h2 = y + h - splitRow - 1;
+      if (w1 >= 2 && h1 >= 2) divide(x, y, w1, h1);
+      if (w2 >= 2 && h1 >= 2) divide(splitCol + 1, y, w2, h1);
+      if (w1 >= 2 && h2 >= 2) divide(x, splitRow + 1, w1, h2);
+      if (w2 >= 2 && h2 >= 2) divide(splitCol + 1, splitRow + 1, w2, h2);
+    }
+
+    divide(0, 0, SIZE, SIZE);
+
+    const walls = new Set();
+    for (let yy = 0; yy < SIZE; yy++)
+      for (let xx = 0; xx < SIZE; xx++)
+        if (grid[idx(xx, yy)] === 1) walls.add(xx + ',' + yy);
+
+    state.walls = walls;
+    state.start = { x: 0, y: 0 };
+    state.end = { x: SIZE - 1, y: SIZE - 1 };
+    state.seed = Math.floor(Math.random() * 1e9);
+  }
+
+  // Winding corridor maze (DFS backtracker) — one long path through the grid.
+  function generateMazeWinding() {
+    const W = 10, H = 10;
+    const gw = 2 * W + 1, gh = 2 * H + 1;
+    const grid = Array(gw * gh).fill(1);
+    function idx(x, y) { return y * gw + x; }
+    const stack = [{ x: 1, y: 1 }];
+    grid[idx(1, 1)] = 0;
+
+    const dirs = [[-2, 0], [2, 0], [0, -2], [0, 2]];
+    while (stack.length > 0) {
+      const p = stack[stack.length - 1];
+      const neighbors = dirs
+        .map(([dx, dy]) => ({ x: p.x + dx, y: p.y + dy }))
+        .filter(n => n.x >= 1 && n.x < gw - 1 && n.y >= 1 && n.y < gh - 1 && grid[idx(n.x, n.y)] === 1);
+      if (neighbors.length === 0) { stack.pop(); continue; }
+      const n = neighbors[Math.random() * neighbors.length | 0];
+      grid[idx((p.x + n.x) / 2, (p.y + n.y) / 2)] = 0;
+      grid[idx(n.x, n.y)] = 0;
+      stack.push(n);
+    }
+
+    const walls = new Set();
+    for (let sy = 0; sy < SIZE; sy++) {
+      for (let sx = 0; sx < SIZE; sx++) {
+        const gx = 1 + (sx * (gw - 2) / SIZE) | 0;
+        const gy = 1 + (sy * (gh - 2) / SIZE) | 0;
+        if (grid[idx(gx, gy)] === 1 && !(sx === 0 && sy === 0) && !(sx === SIZE - 1 && sy === SIZE - 1))
+          walls.add(sx + ',' + sy);
+      }
+    }
+    state.walls = walls;
+    state.start = { x: 0, y: 0 };
+    state.end = { x: SIZE - 1, y: SIZE - 1 };
+    state.seed = Math.floor(Math.random() * 1e9);
+  }
+
+  function run(source) {
+    if (source == null) source = 'load';
+    const { start, end, walls } = state;
+
+    const t0 = performance.now();
+    const d = runDijkstra(start, end, walls);
+    const tD = performance.now() - t0;
+
+    const t1 = performance.now();
+    const a = runAStar(start, end, walls);
+    const tA = performance.now() - t1;
+
+    const t2 = performance.now();
+    const l = runLivnium(start, end, walls);
+    const tL = performance.now() - t2;
+
+    function pathFound(path, start, end) {
+      if (!path.length) return false;
+      const s = path[0], e = path[path.length - 1];
+      return s.x === start.x && s.y === start.y && e.x === end.x && e.y === end.y;
+    }
+    const dFound = pathFound(d.path, start, end);
+    const aFound = pathFound(a.path, start, end);
+    const lFound = pathFound(l.path, start, end);
+
+    const solvable = dFound;
+    const optimalLen = solvable ? d.path.length : -1;
+    const aLen = aFound ? a.path.length : -1;
+    const lLen = lFound ? l.path.length : -1;
+    const gapA = solvable && aFound ? aLen - optimalLen : null;
+    const gapL = solvable && lFound ? lLen - optimalLen : null;
+
+    const dExp = d.visitOrder.length;
+    const aExp = a.visitOrder.length;
+    const lExp = l.visitOrder.length;
+    const maxCount = Math.max(dExp, aExp, lExp, 1);
+    const wallPct = (walls.size / (SIZE * SIZE) * 100).toFixed(1);
+    const seed = state.seed != null ? state.seed : '—';
+
+    document.getElementById('no-path-badge').classList.toggle('visible', !solvable);
+    document.getElementById('meta-line').textContent = 'wallPct: ' + wallPct + '%  |  solvable: ' + solvable + '  |  seed: ' + seed;
+
+    const optLabel = solvable ? (optimalLen + '') : 'N/A (no path)';
+    const pathD = solvable ? (optimalLen + '') : 'N/A';
+    const pathL = lFound ? (lLen + '') : 'N/A';
+    const gapLStr = gapL !== null ? (gapL > 0 ? '+' + gapL : '0') : 'N/A';
+    document.getElementById('dijkstra-count').textContent = 'Expanded: ' + dExp + ' · path: ' + pathD + ' · ' + tD.toFixed(2) + ' ms';
+    document.getElementById('livnium-count').textContent = 'Expanded: ' + lExp + ' · path: ' + pathL + (gapL !== null && gapL > 0 ? ' (gap +' + gapL + ')' : (gapL === 0 ? ' (optimal)' : '')) + ' · ' + tL.toFixed(2) + ' ms';
+
+    document.getElementById('bar-dijkstra').style.width = (100 * dExp / maxCount) + '%';
+    document.getElementById('bar-astar').style.width = (100 * aExp / maxCount) + '%';
+    document.getElementById('bar-livnium').style.width = (100 * lExp / maxCount) + '%';
+    document.getElementById('num-dijkstra').textContent = dExp + ' expanded';
+    document.getElementById('num-astar').textContent = aExp + ' expanded';
+    document.getElementById('num-livnium').textContent = lExp + ' expanded';
+
+    let verdict = 'Dijkstra ' + dExp + ' · A* ' + aExp + ' · Livnium ' + lExp + ' (expanded). Optimal: ' + optLabel + '.';
+    if (solvable) {
+      if (aFound) verdict += ' A* path: ' + aLen + (gapA === 0 ? ' (optimal).' : ' (gap +' + gapA + ').');
+      else verdict += ' A* path: N/A.';
+      if (lFound) verdict += ' Livnium path: ' + lLen + (gapL === 0 ? ' (optimal).' : ' (gap +' + gapL + ').');
+      else verdict += ' Livnium path: N/A.';
+    } else {
+      verdict += ' Path: N/A. Gap: N/A.';
+    }
+    document.getElementById('speed-verdict').textContent = verdict;
+
+    const cD = document.getElementById('canvas-dijkstra').getContext('2d');
+    const cL = document.getElementById('canvas-livnium').getContext('2d');
+    draw(cD, start, end, walls, d.visitOrder, d.path);
+    draw(cL, start, end, walls, l.visitOrder, l.path);
+
+    fetch('/log', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        source: source,
+        gridSize: SIZE,
+        start: { x: start.x, y: start.y },
+        end: { x: end.x, y: end.y },
+        walls: walls.size,
+        wallPct: parseFloat(wallPct),
+        solvable: solvable,
+        seed: state.seed != null ? state.seed : null,
+        optimalLen: optimalLen,
+        dijkstra: { expanded: dExp, found: dFound, pathLen: solvable ? optimalLen : -1, gap: solvable ? 0 : null, ms: tD },
+        astar: { expanded: aExp, found: aFound, pathLen: aFound ? aLen : -1, gap: gapA, ms: tA },
+        livnium: { expanded: lExp, found: lFound, pathLen: lFound ? lLen : -1, gap: gapL, ms: tL }
+      })
+    }).catch(function() {});
+  }
+
+  document.getElementById('btn-random').onclick = function() {
+    randomMap();
+    run('random obstacles');
+  };
+  document.getElementById('btn-maze').onclick = function() {
+    generateMaze();
+    run('complicated maze');
+  };
+  document.getElementById('btn-winding').onclick = function() {
+    generateMazeWinding();
+    run('winding maze');
+  };
+
+  generateMaze();
+  run('load');
+})();
+</script>
+</body>
+</html>

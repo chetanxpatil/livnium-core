@@ -1,0 +1,10 @@
+name: livnium_core
+description: Livnium Core — Geometric Artificial Intelligence. Physics, geometry, and Hebbian self-wiring.
+version: 1.0.0
+repository: https://github.com/realcore/livnium-core
+
+environment:
+  sdk: ^3.0.0
+
+dev_dependencies:
+  test: ^1.24.0
