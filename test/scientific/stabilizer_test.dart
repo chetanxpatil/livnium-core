@@ -7,8 +7,6 @@ import 'package:test/test.dart';
 /// as a new event, so C moves (linked to B). The thought ripples until the wave
 /// is done.
 
-bool _almostEq(double a, double b, [double eps = 1e-9]) => (a - b).abs() < eps;
-
 void main() {
   group('Phase 4: Stabilizer (Domino / Chain Reaction)', () {
     // Experiment: The Domino Effect
