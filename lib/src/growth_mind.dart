@@ -1,4 +1,3 @@
-import 'dart:collection';
 import 'dart:math';
 
 import 'bell_pair.dart';
@@ -6,6 +5,7 @@ import 'conservation.dart';
 import 'coordinates.dart';
 import 'hebbian_learner.dart';
 import 'lattice.dart';
+import 'stabilizer.dart';
 
 /// Result of a single [GrowthMind.perceive] call: how many entanglements fired.
 class PerceiveResult {
@@ -57,37 +57,12 @@ class GrowthMind {
   }
 
   /// Propagates rotation events through the pair network (wavefront).
-  /// If A moves B and B is linked to C, C moves too; visited set prevents cycles.
+  /// Delegates to [Stabilizer] (Phase 4).
   int _stabilize(LatticeCoord initialTrigger, int axis, int direction,
       {Random? random}) {
-    final queue = Queue<_RotationEvent>();
-    final visited = <LatticeCoord>{};
-    var syncsFired = 0;
-
-    queue.add(_RotationEvent(initialTrigger, axis, direction));
-    visited.add(initialTrigger);
-
-    while (queue.isNotEmpty) {
-      final event = queue.removeFirst();
-
-      for (final pair in _pairs) {
-        if (pair.cellA != event.coord && pair.cellB != event.coord) continue;
-
-        final partner = pair.cellA == event.coord ? pair.cellB : pair.cellA;
-        if (visited.contains(partner)) continue;
-
-        final didSync = pair.synchronize(
-            state, event.coord, event.axis, event.direction,
-            random: random);
-        if (didSync) {
-          syncsFired++;
-          queue.add(_RotationEvent(partner, event.axis, -event.direction));
-          visited.add(partner);
-        }
-      }
-    }
-
-    return syncsFired;
+    return Stabilizer().propagate(
+        state, _pairs, initialTrigger, axis, direction,
+        random: random);
   }
 
   /// Records that [coords] were activated together (e.g. in one image). Used by Phase 5 learning.
@@ -98,11 +73,60 @@ class GrowthMind {
 
   /// True if the lattice satisfies D2/D3 conservation (energy and class counts).
   bool get isSane => auditConservation(state);
-}
 
-class _RotationEvent {
-  final LatticeCoord coord;
-  final int axis;
-  final int direction;
-  _RotationEvent(this.coord, this.axis, this.direction);
+  /// Exports the current entanglements (BellPairs) to a JSON-serializable format.
+  /// Use with [loadEntanglements] to save/load the trained model.
+  List<Map<String, dynamic>> exportEntanglements() {
+    return _pairs.map((p) {
+      return <String, dynamic>{
+        'ax': p.cellA.x,
+        'ay': p.cellA.y,
+        'az': p.cellA.z,
+        'bx': p.cellB.x,
+        'by': p.cellB.y,
+        'bz': p.cellB.z,
+        'strength': p.couplingStrength,
+      };
+    }).toList();
+  }
+
+  /// Loads entanglements from a list produced by [exportEntanglements].
+  /// Does not clear existing pairs; use a fresh [GrowthMind] if you want only these pairs.
+  void loadEntanglements(List<Map<String, dynamic>> pairs) {
+    final n = state.n;
+    for (final p in pairs) {
+      final ax = p['ax'] as int? ?? (p['ax'] as num?)?.toInt();
+      final ay = p['ay'] as int? ?? (p['ay'] as num?)?.toInt();
+      final az = p['az'] as int? ?? (p['az'] as num?)?.toInt();
+      final bx = p['bx'] as int? ?? (p['bx'] as num?)?.toInt();
+      final by = p['by'] as int? ?? (p['by'] as num?)?.toInt();
+      final bz = p['bz'] as int? ?? (p['bz'] as num?)?.toInt();
+      final strength = (p['strength'] as num?)?.toDouble() ?? 1.0;
+      if (ax == null ||
+          ay == null ||
+          az == null ||
+          bx == null ||
+          by == null ||
+          bz == null) continue;
+      entangleConcepts(
+        LatticeCoord(n, ax, ay, az),
+        LatticeCoord(n, bx, by, bz),
+        strength: strength.clamp(0.0, 1.0),
+      );
+    }
+  }
+
+  /// Creates a new [GrowthMind] from an exported snapshot (e.g. from disk).
+  /// [data] must contain "n" (int) and "pairs" (List of maps with ax,ay,az,bx,by,bz,strength).
+  static GrowthMind fromExport(Map<String, dynamic> data) {
+    final n = data['n'] as int? ?? (data['n'] as num?)?.toInt() ?? 3;
+    final mind = GrowthMind(n);
+    final pairs = data['pairs'] as List<dynamic>?;
+    if (pairs != null && pairs.isNotEmpty) {
+      mind.loadEntanglements(
+        pairs.cast<Map<String, dynamic>>(),
+      );
+    }
+    return mind;
+  }
 }

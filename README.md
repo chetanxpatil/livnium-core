@@ -31,7 +31,7 @@ Livnium is built on five pillars, moving from strict physical laws to high-level
 * **Result:** High-intensity pixels become physical rotations in the crystal structure.
 
 ### Phase 4: The Soul (Stabilization)
-**Core:** `Stabilizer`
+**Core:** `Stabilizer` (see `lib/src/stabilizer.dart` and `doc/PHASE4_STABILIZATION.md`)
 * **Concept:** Thinking is a chain reaction.
 * **Mechanism:** A geometric wavefront. If A moves B, and B is linked to C, the stabilizer propagates the energy until the entire thought is formed.
 * **Result:** **Holographic Recall.** You can remove 50% of an image, and the crystal will physically reconstruct the missing half to satisfy its internal geometry.
@@ -94,12 +94,18 @@ Open the printed URL. Click the cyan cell (Left Eye); the magenta cell (Right Ey
 
 ## 🧪 Scientific Verification
 
-Livnium is not a black box. It is verified by rigorous scientific tests:
+Livnium is not a black box. It is verified by rigorous scientific tests in `test/scientific/`:
 
-* **`bell_pair_test.dart`** — Proves non-local interaction (Spooky Action) works.
-* **`growth_mind_test.dart`** — Proves holographic memory recall and probabilistic coupling.
-* **`stabilizer_test.dart`** — Proves recursive thought propagation (Domino A→B→C).
-* **`hebbian_test.dart`** — Proves autonomous self-wiring and threshold (no hallucination from noise).
+* **`bell_pair_test.dart`** — Non-local interaction (Spooky Action) and energy conservation.
+* **`growth_mind_test.dart`** — Holographic memory recall and probabilistic coupling.
+* **`stabilizer_test.dart`** — Phase 4 recursive thought propagation (Domino A→B→C).
+* **`hebbian_test.dart`** — Autonomous self-wiring and threshold (no hallucination from noise).
+* **`basin_dynamics_test.dart`** — Basin reinforcement/decay and minimum mass.
+* **`conservation_ledger_test.dart`** — Ledger audit and renormalisation.
+* **`cheat_prevention_test.dart`** — Safeguards against manual weight tampering.
+* **`concept_encoder_test.dart`** — Image-to-lattice encoding.
+* **`rotation_conservation_test.dart`**, **`axiom_invariants_test.dart`**, **`derived_laws_test.dart`** — Physics and invariants.
+* **`path_flow` / `path_collapse`** — Pathfinding behaviour covered by tests in `test/`.
 
 Run all: `dart test`
 
