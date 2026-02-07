@@ -120,5 +120,5 @@ By forcing Intelligence to obey Physics, we create a system that is transparent,
 
 ---
 
-*Built by The Architect.*  
+*Built by Chetan Patil.*  
 *Verified 2026.*
